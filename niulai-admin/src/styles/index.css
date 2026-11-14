@@ -1,0 +1,37 @@
+:root {
+  --admin-bg: #f5f7fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: #1f2937;
+}
+
+/* el-dialog 被 teleport 到 body，弹窗美化需写全局 */
+.product-dialog .el-dialog__header {
+  margin: 0;
+  padding: 18px 24px;
+  border-bottom: 1px solid #ebeef5;
+}
+.product-dialog .el-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.product-dialog .el-dialog__body {
+  padding: 24px 24px 8px;
+}
+.product-dialog .el-dialog__footer {
+  padding: 16px 24px;
+  border-top: 1px solid #ebeef5;
+}

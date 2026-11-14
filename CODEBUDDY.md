@@ -2,10 +2,11 @@
 
 ## 项目概述
 
-牛来充值 H5 系统。仓库下只有两个平级目录，各自独立，不是 monorepo，也没有根级包管理：
+牛来充值系统。仓库下有三个平级目录，各自独立，不是 monorepo，也没有根级包管理：
 
 - `client/`：移动端 H5 前端
 - `server/`：HTTP 后端服务
+- `niulai-admin/`：PC 端运营后台（独立 Vite 项目）
 
 改动前先确认属于哪一侧，不要跨目录混放文件。
 
@@ -24,6 +25,16 @@ niulai/
 │   │   └── assets/styles/  # variables.css / global.css
 │   ├── .env.development    # VITE_API_BASE_URL=/api
 │   └── vite.config.js      # @ 别名、/api 代理到 :8080
+├── niulai-admin/           # PC 运营后台（Vue3 + Vite + Element Plus + axios）
+│   ├── src/
+│   │   ├── api/            # 接口层（product.js）
+│   │   ├── utils/          # request.js(axios 封装)
+│   │   ├── router/         # 路由
+│   │   ├── layout/         # AdminLayout（侧栏 + Header + 主内容）
+│   │   ├── views/          # ProductManage / Login / components/ProductForm
+│   │   └── styles/         # 全局样式
+│   ├── .env.development    # VITE_API_BASE_URL=/api
+│   └── vite.config.js      # @ 别名、/api 代理到 :8080（端口 5174）
 └── server/                 # 后端
     ├── configs/config.yaml # 配置
     ├── migrations/         # 建表 SQL（首次初始化执行）
@@ -40,6 +51,8 @@ niulai/
 
 **client**：Vue 3（`<script setup>`）、Vite 6、vue-router 4（hash 模式）、Pinia、Vant 4、axios。ESM（`type: module`），别名 `@` 指向 `src`。
 
+**niulai-admin**：Vue 3（`<script setup>`）、Vite 6、vue-router 4（hash 模式）、Element Plus、axios。ESM（`type: module`），别名 `@` 指向 `src`，开发端口 5174。
+
 **server**：Go 1.22、Gin、GORM + MySQL、Viper、shopspring/decimal。module 名为 `niulai`，内部包用 `niulai/internal/...`、`niulai/pkg/...` 引用。
 
 ## 常用命令
@@ -48,6 +61,11 @@ niulai/
 # 前端（在 client/ 下）
 npm run dev       # 开发服务器 :5173
 npm run build     # 产物输出到 client/dist
+npm run preview
+
+# 运营后台（在 niulai-admin/ 下）
+npm run dev       # 开发服务器 :5174
+npm run build     # 产物输出到 niulai-admin/dist
 npm run preview
 
 # 后端（在 server/ 下）
