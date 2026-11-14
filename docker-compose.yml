@@ -53,5 +53,14 @@ services:
     ports:
       - "${WEB_PORT:-80}:80"
 
+  admin-web:
+    build: ./niulai-admin
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "${ADMIN_WEB_PORT:-1009}:80"
+
 volumes:
   mysql-data:
