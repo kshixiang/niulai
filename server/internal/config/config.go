@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -70,6 +71,8 @@ func InitConfig() error {
 	v.AddConfigPath("../../configs")
 
 	v.SetEnvPrefix("APP")
+	// 嵌套配置 mysql.host 对应 APP_MYSQL_HOST，而不是带点的 APP_MYSQL.HOST
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	setDefaults(v)

@@ -54,6 +54,21 @@ go run .          # 启动服务 :8080（需先启动 MySQL）
 go build ./...
 ```
 
+## 部署
+
+在仓库根目录：
+
+```bash
+cp .env.example .env     # 按需修改密码与密钥
+docker compose up -d --build
+```
+
+- `web`（nginx，端口由 `WEB_PORT` 控制，默认 80）托管前端静态产物，并把 `/api` 反代到 `server:8080`；保留 `/api` 前缀，与 vite 代理行为一致，后端路由需注册在 `/api` 下。
+- `server` 不对宿主机暴露端口；MySQL 数据保存在 `mysql-data` 卷。
+- 敏感值用 `APP_` 前缀环境变量覆盖（如 `APP_MYSQL_HOST`、`APP_JWT_SECRET`），`internal/config` 已设 `SetEnvKeyReplacer`，不要改回。
+- 当前没有独立 SQL 迁移脚本，`.env` 默认 `APP_SERVER_MODE=debug` 由 GORM 自动建表（幂等）；补齐正式迁移脚本后改为 `release`。
+- `.env` 已被忽略，不要提交真实密码与密钥。
+
 ## 接口与数据约定
 
 - 前端所有请求走 `@/utils/request.js`，`baseURL` 取 `VITE_API_BASE_URL`（默认 `/api`）；开发期由 vite 代理转发到 `http://localhost:8080`，联调不要写死绝对地址。
