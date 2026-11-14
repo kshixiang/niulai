@@ -4,11 +4,15 @@
 
 牛来充值系统。仓库下有三个平级目录，各自独立，不是 monorepo，也没有根级包管理：
 
-- `client/`：移动端 H5 前端
-- `server/`：HTTP 后端服务
-- `niulai-admin/`：PC 端运营后台（独立 Vite 项目）
+- `client/`：移动端 H5 前端（Vant 4），面向 C 端用户的充值页面；Vue 3 + Vite，开发端口 5173。
+- `niulai-admin/`：PC 运营后台（Element Plus），面向运营人员，用于商品上下架与渠道维护；独立 Vite 项目，开发端口 5174，只调 `/api/v1/admin/*`。
+- `server/`：HTTP 后端服务（Go + Gin + GORM + MySQL），统一提供 `/api` 下的接口，被上面两个前端共用。
 
-改动前先确认属于哪一侧，不要跨目录混放文件。
+改动前先确认属于哪一侧，不要跨目录混放文件：
+
+- 页面、组件、路由与请求封装按端各自放在 `client/src` 或 `niulai-admin/src`，两个前端互不引用，也各自维护自己的 `package.json` / `vite.config.js`；
+- 后端接口、模型与迁移只放 `server/`，两个前端都通过 `/api` 代理访问，不在前端写死绝对地址；
+- 判断归属时看「给谁用」：C 端用户 → `client/`，运营人员 → `niulai-admin/`，数据与接口 → `server/`。
 
 ## 目录结构
 
@@ -75,6 +79,8 @@ go build ./...
 
 ## 部署
 
+目标 Linux 服务器：`159.195.218.222`，HTTP 端口 `1008`（即 `http://159.195.218.222:1008`），用于部署 `server` 与前端静态产物；本地联调时后端也指向该机。此地址仅作环境说明，前端请求一律走 `/api` 相对路径，不要在代码里写死绝对地址。
+
 在仓库根目录：
 
 ```bash
@@ -82,8 +88,9 @@ cp .env.example .env     # 按需修改密码与密钥
 docker compose up -d --build
 ```
 
-- `web`（nginx，端口由 `WEB_PORT` 控制，默认 80）托管前端静态产物，并把 `/api` 反代到 `server:8080`；保留 `/api` 前缀，与 vite 代理行为一致，后端路由需注册在 `/api` 下。
+- `web`（nginx，端口由 `WEB_PORT` 控制，默认 80；该服务器对外用 1008）托管前端静态产物，并把 `/api` 反代到 `server:8080`；保留 `/api` 前缀，与 vite 代理行为一致，后端路由需注册在 `/api` 下。
 - `server` 不对宿主机暴露端口；MySQL 数据保存在 `mysql-data` 卷。
+- `niulai-admin` 是独立 Vite 项目，未纳入 `docker compose`；其 `vite.config.js` 默认代理到 `http://localhost:8080`，仅适用于本机 `go run .`。联调上述服务器时把 target 改为 `http://159.195.218.222:1008`（nginx 会把 `/api` 反代到 `server:8080`），该改动只用于本地，不要提交硬编码地址。
 - 敏感值用 `APP_` 前缀环境变量覆盖（如 `APP_MYSQL_HOST`、`APP_JWT_SECRET`），`internal/config` 已设 `SetEnvKeyReplacer`，不要改回。
 - 表结构由 `server/migrations/001_init.sql` 显式管理，仅在 mysql 数据卷首次初始化时执行；生产用 `APP_SERVER_MODE=release` 关闭 GORM 自动迁移。已有数据卷不会重跑初始化脚本，后续改表结构需新增迁移文件。
 - `.env` 已被忽略，不要提交真实密码与密钥。
