@@ -32,6 +32,10 @@ admin:
   username: ""
   password: ""
 
+# 商品封面上传目录（由 compose 命名卷持久化）
+upload:
+  dir: /app/uploads
+
 # 日志配置
 log:
   level: info

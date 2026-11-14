@@ -1,37 +1,47 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { showToast } from 'vant'
+import { getProducts } from '@/api'
 
-/* 商品分类 Tab */
-const categories = [
-  { key: 'all',     label: '全部' },
-  { key: 'fast',    label: '快充' },
-  { key: 'life',    label: '生活缴费' },
-  { key: 'finance', label: '金融财税' },
-  { key: 'game',    label: '游戏充值' },
-  { key: 'vip',     label: '视频会员' },
-]
+/* 商品类型 → 展示图标/配色（只影响样式，不改变真实数据） */
+const typeStyle = {
+  话费: { icon: 'phone-o',    tone: 'blue'   },
+  卡券: { icon: 'gift-card-o', tone: 'purple' },
+  会员: { icon: 'vip-card-o',  tone: 'pink'   },
+}
+const styleOf = (type) => typeStyle[type] || { icon: 'shop-o', tone: 'cyan' }
+
+const products = ref([])
+const loading = ref(false)
 const activeCategory = ref('all')
 
-/* 示例数据；接后端时换成 request.get('/products') */
-const products = [
-  { id: 1, name: '话费充值', desc: '三网通用 · 秒到账',   discount: '9.8折', icon: 'phone-o',       cat: 'fast',    tone: 'purple' },
-  { id: 2, name: '流量包',   desc: '全国流量 · 即充即用', discount: '8.8折', icon: 'fire-o',        cat: 'fast',    tone: 'blue'   },
-  { id: 3, name: '电费缴纳', desc: '国网南网 · 在线缴费', discount: '9.5折', icon: 'bulb-o',        cat: 'life',    tone: 'cyan'   },
-  { id: 4, name: '水费燃气', desc: '一站式生活缴费',       discount: '9.6折', icon: 'wap-home-o',    cat: 'life',    tone: 'green'  },
-  { id: 5, name: '财税代缴', desc: '企业个税 · 安全合规',  discount: '9.2折', icon: 'balance-o',     cat: 'finance', tone: 'orange' },
-  { id: 6, name: '游戏点券', desc: '主流游戏 · 官方直充',  discount: '8.5折', icon: 'gift-o',        cat: 'game',    tone: 'pink'   },
-  { id: 7, name: '视频会员', desc: '全网会员 · 自动发货',  discount: '7.9折', icon: 'play-circle-o', cat: 'vip',     tone: 'purple' },
-  { id: 8, name: '加油卡',   desc: '两桶油 · 在线直充',    discount: '9.7折', icon: 'logistics',     cat: 'all',     tone: 'blue'   },
-]
+/* 分类从真实商品数据派生，避免前端写死分类与后端 type 对不上 */
+const categories = computed(() => {
+  const types = [...new Set(products.value.map((p) => p.type).filter(Boolean))]
+  return [{ key: 'all', label: '全部' }, ...types.map((t) => ({ key: t, label: t }))]
+})
 
 const visibleProducts = computed(() =>
   activeCategory.value === 'all'
-    ? products
-    : products.filter((p) => p.cat === activeCategory.value),
+    ? products.value
+    : products.value.filter((p) => p.type === activeCategory.value),
 )
 
-const onProduct = (item) => showToast(`即将打开「${item.name}」`)
+const loadProducts = async () => {
+  loading.value = true
+  try {
+    const data = await getProducts({ page: 1, page_size: 100 })
+    products.value = Array.isArray(data?.list) ? data.list : []
+  } catch {
+    products.value = []
+  } finally {
+    loading.value = false
+  }
+}
+onMounted(loadProducts)
+
+const onProduct = (item) =>
+  showToast(item.sale_price ? `${item.name} · ¥${item.sale_price}` : item.name)
 </script>
 
 <template>
@@ -87,22 +97,27 @@ const onProduct = (item) => showToast(`即将打开「${item.name}」`)
         <span class="section__more">更多 <van-icon name="arrow" /></span>
       </div>
 
-      <div class="grid">
+      <div v-if="loading" class="grid__loading">
+        <van-loading size="20" /> 加载中…
+      </div>
+
+      <div v-else class="grid">
         <article
           v-for="item in visibleProducts"
           :key="item.id"
           class="card"
-          :class="`card--${item.tone}`"
+          :class="`card--${styleOf(item.type).tone}`"
           @click="onProduct(item)"
         >
-          <div class="card__thumb"><van-icon :name="item.icon" size="28" /></div>
+          <div class="card__thumb"><van-icon :name="styleOf(item.type).icon" size="28" /></div>
           <h4 class="card__name">{{ item.name }}</h4>
-          <p class="card__desc">{{ item.desc }}</p>
-          <span class="card__badge">{{ item.discount }}</span>
+          <p class="card__desc">{{ item.description || '暂无描述' }}</p>
+          <span class="card__price">¥{{ item.sale_price }}</span>
+          <span class="card__badge">{{ item.discount_label || '优惠' }}</span>
         </article>
       </div>
 
-      <p v-if="!visibleProducts.length" class="grid__empty">该分类暂无商品</p>
+      <p v-if="!loading && !visibleProducts.length" class="grid__empty">该分类暂无商品</p>
     </section>
   </div>
 </template>
@@ -195,6 +210,10 @@ const onProduct = (item) => showToast(`即将打开「${item.name}」`)
 /* ---------- 双列网格 ---------- */
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .grid__empty { padding: 32px 0; text-align: center; font-size: 12px; color: var(--text-muted); }
+.grid__loading {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 32px 0; font-size: 12px; color: var(--text-muted);
+}
 
 .card {
   position: relative; overflow: hidden;
@@ -226,6 +245,12 @@ const onProduct = (item) => showToast(`即将打开「${item.name}」`)
 .card__desc {
   margin-top: 4px; font-size: 11px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 右下角售价 */
+.card__price {
+  position: absolute; right: 10px; bottom: 6px;
+  font-size: 13px; font-weight: 800; color: var(--c-accent);
 }
 
 /* 左下角黄色折扣角标 */

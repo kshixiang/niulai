@@ -1,7 +1,9 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Plus, Delete } from '@element-plus/icons-vue'
 import { createProduct, updateProduct } from '@/api/product'
+import { uploadCover } from '@/api/upload'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -19,6 +21,8 @@ const title = computed(() => (isEdit.value ? '编辑商品' : '新增商品'))
 
 // 与后端 CreateProductRequest 的 binding:"oneof=话费 卡券" 保持一致
 const TYPE_OPTIONS = ['话费', '卡券']
+const COVER_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const MAX_COVER_SIZE = 2 * 1024 * 1024
 
 const emptyForm = () => ({
   name: '',
@@ -29,11 +33,13 @@ const emptyForm = () => ({
   channel_id: null,
   discount_label: '',
   description: '',
+  status: 0, // 仅新增时提交：1=立即上架 0=暂不上架
 })
 
 const form = reactive(emptyForm())
 const formRef = ref(null)
 const submitting = ref(false)
+const uploading = ref(false)
 
 const isNumber = (v) => typeof v === 'number' && !Number.isNaN(v)
 
@@ -55,7 +61,7 @@ const validateSalePrice = (rule, value, callback) => {
 const rules = {
   name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }],
   type: [{ required: true, message: '请选择商品类型', trigger: 'change' }],
-  cover_image: [{ required: true, message: '请输入封面图 URL', trigger: 'blur' }],
+  cover_image: [{ required: true, message: '请上传封面图片', trigger: 'change' }],
   channel_id: [{ required: true, message: '请选择绑定渠道', trigger: 'change' }],
   cost_price: [{ validator: checkPrice('成本价'), trigger: ['blur', 'change'] }],
   sale_price: [{ validator: validateSalePrice, trigger: ['blur', 'change'] }],
@@ -63,6 +69,7 @@ const rules = {
 
 function pick(p) {
   if (!p) return {}
+  // 不带 status：编辑时不改状态，避免触发后端「上架需校验渠道」的限制
   return {
     name: p.name ?? '',
     type: p.type ?? '',
@@ -94,9 +101,42 @@ watch(
   },
 )
 
+function beforeCoverUpload(file) {
+  if (!COVER_TYPES.includes(file.type)) {
+    ElMessage.error('仅支持 jpg / png / gif / webp 图片')
+    return false
+  }
+  if (file.size > MAX_COVER_SIZE) {
+    ElMessage.error('图片不能超过 2MB')
+    return false
+  }
+  return true
+}
+
+async function handleCoverUpload({ file }) {
+  uploading.value = true
+  try {
+    // 拦截器已解包 data → { url }
+    const data = await uploadCover(file)
+    form.cover_image = data.url
+    // 清掉「请上传封面图片」的校验提示
+    formRef.value?.validateField('cover_image').catch(() => {})
+  } finally {
+    uploading.value = false
+  }
+}
+
+function removeCover() {
+  form.cover_image = ''
+}
+
 async function submit() {
   const ok = await formRef.value.validate().catch(() => false)
   if (!ok) return
+  if (uploading.value) {
+    ElMessage.warning('封面还在上传中，请稍候')
+    return
+  }
   submitting.value = true
   try {
     // 后端金额字段是 string（decimal 用字符串解析），不能传 number
@@ -105,6 +145,7 @@ async function submit() {
       cost_price: String(form.cost_price),
       sale_price: String(form.sale_price),
     }
+    if (isEdit.value) delete payload.status
     if (isEdit.value) await updateProduct(props.product.id, payload)
     else await createProduct(payload)
     ElMessage.success(isEdit.value ? '编辑成功' : '新增成功')
@@ -125,6 +166,15 @@ async function submit() {
     destroy-on-close
     class="product-dialog"
   >
+    <el-alert
+      v-if="!channels.length"
+      class="channel-alert"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="暂无可用渠道，请先创建渠道后再新增商品"
+    />
+
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
       <el-form-item label="商品名称" prop="name">
         <el-input v-model="form.name" placeholder="请输入商品名称" maxlength="128" show-word-limit clearable />
@@ -138,8 +188,24 @@ async function submit() {
 
       <el-form-item label="封面图片" prop="cover_image">
         <div class="cover-field">
-          <el-input v-model="form.cover_image" placeholder="请输入封面图 URL（后续替换为上传组件）" clearable />
-          <el-image v-if="form.cover_image" :src="form.cover_image" fit="cover" class="cover-preview" />
+          <el-upload
+            class="cover-upload"
+            :show-file-list="false"
+            :http-request="handleCoverUpload"
+            :before-upload="beforeCoverUpload"
+            :disabled="uploading"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+          >
+            <div v-if="form.cover_image" class="cover-preview-wrap">
+              <el-image :src="form.cover_image" fit="cover" class="cover-preview" />
+              <span class="cover-change">点击更换</span>
+            </div>
+            <el-button v-else :loading="uploading" :icon="Plus">上传封面</el-button>
+          </el-upload>
+          <el-button v-if="form.cover_image" link type="danger" :icon="Delete" @click="removeCover">
+            移除
+          </el-button>
+          <span class="cover-hint">jpg / png / gif / webp，≤2MB</span>
         </div>
       </el-form-item>
 
@@ -178,6 +244,19 @@ async function submit() {
         </el-select>
       </el-form-item>
 
+      <el-form-item v-if="!isEdit" label="上架状态">
+        <div class="status-field">
+          <el-switch
+            v-model="form.status"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="立即上架"
+            inactive-text="暂不上架"
+          />
+          <span class="status-hint">上架需绑定可用的上游渠道</span>
+        </div>
+      </el-form-item>
+
       <el-form-item label="折扣标签" prop="discount_label">
         <el-input v-model="form.discount_label" placeholder="如：7.8折（留空则不展示）" clearable />
       </el-form-item>
@@ -196,23 +275,53 @@ async function submit() {
 
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">确定</el-button>
+      <el-button type="primary" :loading="submitting || uploading" @click="submit">确定</el-button>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
+.channel-alert {
+  margin-bottom: 18px;
+}
 .cover-field {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
 }
+.cover-preview-wrap {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  cursor: pointer;
+}
 .cover-preview {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
   border: 1px solid #ebeef5;
+}
+.cover-change {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  line-height: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 0 0 8px 8px;
+}
+.cover-hint,
+.status-hint {
+  color: #9ca3af;
+  font-size: 12px;
+}
+.status-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style>

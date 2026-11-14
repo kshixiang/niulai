@@ -32,11 +32,12 @@ type CreateChannelRequest struct {
 	Status int8   `json:"status" binding:"oneof=0 1"`
 }
 
-// UpdateChannelRequest 更新渠道请求（全量更新）
+// UpdateChannelRequest 更新渠道请求。
+// api_url / api_key 为空表示不修改（列表不回显密钥，编辑时无法原样带回）。
 type UpdateChannelRequest struct {
 	Name   string `json:"name" binding:"required,max=128"`
-	APIURL string `json:"api_url" binding:"required,max=512"`
-	APIKey string `json:"api_key" binding:"required,max=255"`
+	APIURL string `json:"api_url" binding:"omitempty,max=512"`
+	APIKey string `json:"api_key" binding:"omitempty,max=255"`
 	Status int8   `json:"status" binding:"oneof=0 1"`
 }
 
@@ -79,7 +80,7 @@ func (s *ChannelService) List(ctx context.Context, page, pageSize int) ([]model.
 	return list, total, nil
 }
 
-// Update 全量更新渠道信息
+// Update 更新渠道信息。api_url / api_key 仅在非空时覆盖，避免编辑时清空密钥。
 func (s *ChannelService) Update(ctx context.Context, id uint64, req *UpdateChannelRequest) (*model.Channel, error) {
 	var ch model.Channel
 	if err := s.db.WithContext(ctx).First(&ch, id).Error; err != nil {
@@ -89,8 +90,12 @@ func (s *ChannelService) Update(ctx context.Context, id uint64, req *UpdateChann
 		return nil, fmt.Errorf("查询渠道失败: %w", err)
 	}
 	ch.Name = req.Name
-	ch.APIURL = req.APIURL
-	ch.APIKey = req.APIKey
+	if req.APIURL != "" {
+		ch.APIURL = req.APIURL
+	}
+	if req.APIKey != "" {
+		ch.APIKey = req.APIKey
+	}
 	ch.Status = req.Status
 	if err := s.db.WithContext(ctx).Save(&ch).Error; err != nil {
 		return nil, fmt.Errorf("更新渠道失败: %w", err)

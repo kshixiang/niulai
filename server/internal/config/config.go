@@ -14,6 +14,7 @@ type Config struct {
 	Redis  RedisConfig  `mapstructure:"redis"`
 	JWT    JWTConfig    `mapstructure:"jwt"`
 	Admin  AdminConfig  `mapstructure:"admin"`
+	Upload UploadConfig `mapstructure:"upload"`
 	Log    LogConfig    `mapstructure:"log"`
 }
 
@@ -21,6 +22,11 @@ type Config struct {
 type AdminConfig struct {
 	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
+}
+
+// UploadConfig 商品封面上传目录，由 compose 命名卷持久化。
+type UploadConfig struct {
+	Dir string `mapstructure:"dir"`
 }
 
 // ServerConfig HTTP 服务配置
@@ -112,6 +118,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.expire", 24)
 	v.SetDefault("admin.username", "")
 	v.SetDefault("admin.password", "")
+	v.SetDefault("upload.dir", "/app/uploads")
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.path", "./logs")
 }

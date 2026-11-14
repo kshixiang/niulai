@@ -14,6 +14,17 @@ import (
 func Register(r *gin.Engine, db *gorm.DB) {
 	v1 := r.Group("/api/v1")
 
+	// 封面公开可读：<img> 不带 Authorization，必须挂在免鉴权路径下
+	uploadCtl := controller.NewUploadController()
+	v1.GET("/uploads/:filename", uploadCtl.ServeUpload)
+
+	// C 端公开接口：无需鉴权，只返回可对外展示的字段
+	clientSvc := service.NewClientService(db)
+	clientCtl := controller.NewClientController(clientSvc)
+	v1.GET("/products", clientCtl.ListProducts)
+	v1.GET("/orders", clientCtl.ListOrders)
+	v1.GET("/agents", clientCtl.ListAgents)
+
 	// 登录接口独立成免鉴权组，必须在 AdminRequired 之前注册
 	public := v1.Group("/admin")
 	authCtl := controller.NewAuthController()
@@ -21,6 +32,7 @@ func Register(r *gin.Engine, db *gorm.DB) {
 
 	admin := v1.Group("/admin")
 	admin.Use(middleware.AdminRequired())
+	admin.POST("/upload/cover", uploadCtl.UploadCover)
 
 	// 渠道管理
 	channelSvc := service.NewChannelService(db)

@@ -7,7 +7,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server 
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata \
-    && adduser -D -u 10001 app
+    && adduser -D -u 10001 app \
+    && mkdir -p /app/uploads \
+    && chown -R app:app /app/uploads
 WORKDIR /app
 COPY --from=build /out/server ./server
 COPY configs ./configs

@@ -2,7 +2,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Search, Refresh, Edit } from '@element-plus/icons-vue'
-import { getProducts, getChannels, updateProductStatus } from '@/api/product'
+import { getProducts, updateProductStatus } from '@/api/product'
+import { getChannelOptions } from '@/api/channel'
 import ProductForm from './components/ProductForm.vue'
 
 const loading = ref(false)
@@ -20,7 +21,7 @@ const channelMap = computed(() =>
 )
 
 async function loadChannels() {
-  channels.value = (await getChannels()) || []
+  channels.value = (await getChannelOptions()) || []
 }
 
 async function loadData() {

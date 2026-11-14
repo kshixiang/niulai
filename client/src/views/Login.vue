@@ -7,8 +7,10 @@ const route = useRoute()
 const router = useRouter()
 const user = useUserStore()
 
+// 当前 C 端查询接口均为公开接口，无需鉴权；此处保留演示登录入口，
+// 后续接入用户体系时再替换为真实登录请求。
 const login = () => {
-  user.saveToken('mock-token-123456') // 真实项目：await request.post('/auth/login', form)
+  user.saveToken('mock-token-123456')
   showToast('登录成功')
   router.replace(String(route.query.redirect || '/home'))
 }

@@ -25,6 +25,10 @@ function toLogin(message) {
 // 请求拦截器：自动携带 Token
 service.interceptors.request.use(
   (config) => {
+    if (config.data instanceof FormData) {
+      // 交给浏览器设置 multipart/form-data 及 boundary
+      delete config.headers['Content-Type']
+    }
     const token = getToken()
     if (token) config.headers.Authorization = `Bearer ${token}`
     return config

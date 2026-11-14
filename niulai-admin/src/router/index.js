@@ -14,6 +14,12 @@ const routes = [
         component: () => import('@/views/ProductManage.vue'),
         meta: { title: '商品管理' },
       },
+      {
+        path: 'channels',
+        name: 'Channels',
+        component: () => import('@/views/ChannelManage.vue'),
+        meta: { title: '渠道管理' },
+      },
     ],
   },
   {

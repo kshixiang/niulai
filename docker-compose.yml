@@ -36,6 +36,9 @@ services:
       APP_ADMIN_USERNAME: "${ADMIN_USERNAME:?请在 .env 中设置 ADMIN_USERNAME}"
       APP_ADMIN_PASSWORD: "${ADMIN_PASSWORD:?请在 .env 中设置 ADMIN_PASSWORD}"
       TZ: Asia/Shanghai
+    # 商品封面上传目录，命名卷持久化（容器重建不丢图）
+    volumes:
+      - uploads:/app/uploads
     # 只暴露给 web 反代，不对宿主机开放
     expose:
       - "8080"
@@ -66,3 +69,4 @@ services:
 
 volumes:
   mysql-data:
+  uploads:

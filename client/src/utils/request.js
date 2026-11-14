@@ -45,13 +45,16 @@ service.interceptors.response.use(
     const res = response.data
     if (!res || typeof res.code === 'undefined') return res   // 兼容裸数据
 
+    // 后端统一响应体的消息字段是 msg（历史代码曾读 message，这里做兼容）
+    const msg = res.msg || res.message
+
     if (res.code === SUCCESS_CODE) return res.data             // 直接把 data 交给调用方
     if (res.code === UNAUTHORIZED) {
-      toLogin(res.message)
-      return Promise.reject(new Error(res.message || 'Unauthorized'))
+      toLogin(msg)
+      return Promise.reject(new Error(msg || 'Unauthorized'))
     }
-    showToast({ message: res.message || `请求失败（${res.code}）`, position: 'bottom' })
-    return Promise.reject(new Error(res.message || `code ${res.code}`))
+    showToast({ message: msg || `请求失败（${res.code}）`, position: 'bottom' })
+    return Promise.reject(new Error(msg || `code ${res.code}`))
   },
   (error) => {
     const status = error.response?.status

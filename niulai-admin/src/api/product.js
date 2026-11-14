@@ -13,10 +13,3 @@ export const updateProduct = (id, data) => request.put(`${ADMIN}/products/${id}`
 // 快捷上下架：PUT /api/v1/admin/products/:id/status，body: { status: 1 | 0 }
 export const updateProductStatus = (id, status) =>
   request.put(`${ADMIN}/products/${id}/status`, { status })
-
-// 渠道列表（下拉回显）：GET /api/v1/admin/channels
-// 后端按 response.Page 返回 { list, total }，此处解包成数组供下拉使用
-export const getChannels = async () => {
-  const data = await request.get(`${ADMIN}/channels`, { params: { page: 1, page_size: 100 } })
-  return Array.isArray(data?.list) ? data.list : []
-}
