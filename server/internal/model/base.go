@@ -7,7 +7,8 @@ import (
 )
 
 // BaseModel 通用基础模型。
-// 所有业务表复用该结构，自带自增主键、创建/更新时间以及软删除支持。
+// 业务表复用该结构，自带自增主键、创建/更新时间以及软删除支持。
+// 账本类表（wallets / commission_records）不做软删除，单独声明基础字段。
 // 使用 uint64 而非 int，避免数据量逼近 int 上限；DeletedAt 交由 GORM 自动维护软删除。
 type BaseModel struct {
 	ID        uint64         `gorm:"primaryKey;autoIncrement;comment:主键ID" json:"id"`

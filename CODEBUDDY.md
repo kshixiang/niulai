@@ -26,6 +26,7 @@ niulai/
 │   └── vite.config.js      # @ 别名、/api 代理到 :8080
 └── server/                 # 后端
     ├── configs/config.yaml # 配置
+    ├── migrations/         # 建表 SQL（首次初始化执行）
     ├── internal/
     │   ├── config/         # viper 配置结构与加载
     │   └── model/          # GORM 数据模型
@@ -66,7 +67,7 @@ docker compose up -d --build
 - `web`（nginx，端口由 `WEB_PORT` 控制，默认 80）托管前端静态产物，并把 `/api` 反代到 `server:8080`；保留 `/api` 前缀，与 vite 代理行为一致，后端路由需注册在 `/api` 下。
 - `server` 不对宿主机暴露端口；MySQL 数据保存在 `mysql-data` 卷。
 - 敏感值用 `APP_` 前缀环境变量覆盖（如 `APP_MYSQL_HOST`、`APP_JWT_SECRET`），`internal/config` 已设 `SetEnvKeyReplacer`，不要改回。
-- 当前没有独立 SQL 迁移脚本，`.env` 默认 `APP_SERVER_MODE=debug` 由 GORM 自动建表（幂等）；补齐正式迁移脚本后改为 `release`。
+- 表结构由 `server/migrations/001_init.sql` 显式管理，仅在 mysql 数据卷首次初始化时执行；生产用 `APP_SERVER_MODE=release` 关闭 GORM 自动迁移。已有数据卷不会重跑初始化脚本，后续改表结构需新增迁移文件。
 - `.env` 已被忽略，不要提交真实密码与密钥。
 
 ## 接口与数据约定
@@ -76,7 +77,8 @@ docker compose up -d --build
 - 业务结果与 HTTP 状态解耦：成功失败 HTTP 均返回 200，由 `code` 区分；`CodeSuccess=200`、`CodeError=500`、`CodeInvalidParam=400`、`CodeUnauthorized=401`、`CodeForbidden=403`、`CodeNotFound=404`。
 - 前端响应拦截器以 `code === 200` 为成功并把 `data` 直接交给调用方；`401` 清 token 并跳登录。新增接口沿用该约定，不要另造字段。消息字段以后端 `msg` 为准（`request.js` 里读的是 `res.message`，与后端不一致，涉及错误提示时按 `msg` 对齐）。
 - 鉴权用 JWT：请求拦截器自动加 `Authorization: Bearer <token>`，token 存取统一走 `@/utils/auth.js`。
-- 所有业务表内嵌 `BaseModel`（自增 `uint64` 主键、`created_at`/`updated_at`、`gorm.DeletedAt` 软删除），金额类字段用 `decimal.Decimal`，不要用浮点。
+- 业务表内嵌 `BaseModel`（自增 `uint64` 主键、`created_at`/`updated_at`、`gorm.DeletedAt` 软删除）；账本类表 `wallets`、`commission_records` 无软删除列，单独声明基础字段。金额类字段用 `decimal.Decimal`，不要用浮点，列精度按迁移脚本为 `decimal(10,2)`。
+- `internal/model` 的列名与类型必须与 `migrations/*.sql` 完全一致；新增或改字段时两处同步。
 
 ## 编码约定
 

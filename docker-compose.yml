@@ -8,6 +8,8 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - mysql-data:/var/lib/mysql
+      # 仅在数据卷首次初始化时执行，表结构由 SQL 显式管理
+      - ./server/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # 校验库已建好，避免后端先连上时数据库还没初始化完
       test: ["CMD-SHELL", "mysql -uroot -p\"$$MYSQL_ROOT_PASSWORD\" -e 'USE niulai' >/dev/null 2>&1"]
@@ -23,9 +25,8 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      # 当前没有独立的 SQL 迁移脚本，非 release 模式由 GORM 自动建表（幂等）。
-      # 补齐正式迁移脚本后，把 .env 里的 APP_SERVER_MODE 改成 release。
-      APP_SERVER_MODE: "${APP_SERVER_MODE:-debug}"
+      # 表结构由 server/migrations/001_init.sql 显式管理，生产关闭 GORM 自动迁移
+      APP_SERVER_MODE: "${APP_SERVER_MODE:-release}"
       APP_MYSQL_HOST: mysql
       APP_MYSQL_PORT: "3306"
       APP_MYSQL_USERNAME: root
