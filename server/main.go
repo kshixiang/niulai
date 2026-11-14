@@ -15,6 +15,7 @@ import (
 	"niulai/internal/config"
 	"niulai/pkg/database"
 	"niulai/pkg/response"
+	"niulai/router"
 )
 
 func main() {
@@ -42,6 +43,7 @@ func main() {
 	r.GET("/health", func(c *gin.Context) {
 		response.Success(c, gin.H{"status": "ok"})
 	})
+	router.Register(r, db)
 
 	// 4. 启动 HTTP 服务
 	srv := &http.Server{
