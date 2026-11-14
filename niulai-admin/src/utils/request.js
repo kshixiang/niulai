@@ -1,10 +1,10 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { getToken, removeToken } from './auth'
 
 const SUCCESS_CODE = 200
 const UNAUTHORIZED = 401
-const TOKEN_KEY = 'admin_token'
 
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -14,9 +14,10 @@ const service = axios.create({
 
 let redirecting = false
 function toLogin(message) {
-  localStorage.removeItem(TOKEN_KEY)
+  removeToken()
   ElMessage.error(message || '登录已过期，请重新登录')
-  if (redirecting) return
+  // 已在登录页时不再重复导航（登录失败走的就是这条路径）
+  if (redirecting || router.currentRoute.value.name === 'Login') return
   redirecting = true
   router.replace({ name: 'Login' }).finally(() => { redirecting = false })
 }
@@ -24,7 +25,7 @@ function toLogin(message) {
 // 请求拦截器：自动携带 Token
 service.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem(TOKEN_KEY)
+    const token = getToken()
     if (token) config.headers.Authorization = `Bearer ${token}`
     return config
   },

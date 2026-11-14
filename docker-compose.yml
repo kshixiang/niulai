@@ -33,6 +33,8 @@ services:
       APP_MYSQL_PASSWORD: "${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}"
       APP_MYSQL_DATABASE: niulai
       APP_JWT_SECRET: "${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}"
+      APP_ADMIN_USERNAME: "${ADMIN_USERNAME:?请在 .env 中设置 ADMIN_USERNAME}"
+      APP_ADMIN_PASSWORD: "${ADMIN_PASSWORD:?请在 .env 中设置 ADMIN_PASSWORD}"
       TZ: Asia/Shanghai
     # 只暴露给 web 反代，不对宿主机开放
     expose:

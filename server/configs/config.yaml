@@ -27,6 +27,11 @@ jwt:
   secret: "please-change-this-secret-to-a-long-random-string"
   expire: 24           # 有效期(小时)
 
+# 后台管理员账号（占位，真实值由 APP_ADMIN_* 环境变量注入）
+admin:
+  username: ""
+  password: ""
+
 # 日志配置
 log:
   level: info

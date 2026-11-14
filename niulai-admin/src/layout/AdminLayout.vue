@@ -3,18 +3,21 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { Goods, Shop, SwitchButton, ArrowDown } from '@element-plus/icons-vue'
+import { getUsername, removeToken, removeUsername } from '@/utils/auth'
 
 const route = useRoute()
 const router = useRouter()
 
 const activeMenu = computed(() => route.path)
 const title = computed(() => route.meta.title || '控制台')
+const username = computed(() => getUsername() || '运营管理员')
 const menus = [{ path: '/products', title: '商品管理', icon: Goods }]
 
 function logout() {
   ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })
     .then(() => {
-      localStorage.removeItem('admin_token')
+      removeToken()
+      removeUsername()
       router.replace({ name: 'Login' })
     })
     .catch(() => {})
@@ -53,7 +56,7 @@ function onCommand(cmd) {
         <el-dropdown @command="onCommand">
           <div class="user">
             <el-avatar :size="30" class="avatar">运</el-avatar>
-            <span>运营管理员</span>
+            <span>{{ username }}</span>
             <el-icon><ArrowDown /></el-icon>
           </div>
           <template #dropdown>

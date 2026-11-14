@@ -13,7 +13,14 @@ type Config struct {
 	MySQL  MySQLConfig  `mapstructure:"mysql"`
 	Redis  RedisConfig  `mapstructure:"redis"`
 	JWT    JWTConfig    `mapstructure:"jwt"`
+	Admin  AdminConfig  `mapstructure:"admin"`
 	Log    LogConfig    `mapstructure:"log"`
+}
+
+// AdminConfig 后台管理员账号，生产环境由 APP_ADMIN_* 环境变量注入。
+type AdminConfig struct {
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
 }
 
 // ServerConfig HTTP 服务配置
@@ -103,6 +110,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("mysql.conn_max_lifetime", 60)
 	v.SetDefault("redis.db", 0)
 	v.SetDefault("jwt.expire", 24)
+	v.SetDefault("admin.username", "")
+	v.SetDefault("admin.password", "")
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.path", "./logs")
 }
@@ -113,6 +122,9 @@ func validate(cfg *Config) error {
 	}
 	if cfg.JWT.Secret == "" {
 		return fmt.Errorf("jwt.secret 为必填项")
+	}
+	if cfg.Admin.Username == "" || cfg.Admin.Password == "" {
+		return fmt.Errorf("admin.username 与 admin.password 为必填项，请在 .env 设置 APP_ADMIN_USERNAME / APP_ADMIN_PASSWORD")
 	}
 	return nil
 }

@@ -91,6 +91,7 @@ docker compose up -d --build
 - `web`（nginx，端口由 `WEB_PORT` 控制，默认 80；该服务器对外用 1008）托管 `client` 静态产物，并把 `/api` 反代到 `server:8080`；保留 `/api` 前缀，与 vite 代理行为一致，后端路由需注册在 `/api` 下。
 - `admin-web`（nginx，端口由 `ADMIN_WEB_PORT` 控制，默认 1009）托管 `niulai-admin` 静态产物；同样保留 `/api` 前缀反代到 `server:8080`，hash 路由用 `try_files` 兜底。
 - `server` 不对宿主机暴露端口；MySQL 数据保存在 `mysql-data` 卷。
+- 运营后台登录：`POST /api/v1/admin/login`（免鉴权）用 `.env` 的 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 换取 JWT；`/api/v1/admin/*` 其余接口由 `AdminRequired()` 校验签名与有效期。密钥复用 `JWT_SECRET`、有效期复用 `jwt.expire`（小时），前端 token 存取走 `niulai-admin/src/utils/auth.js`。
 - `niulai-admin` 是独立 Vite 项目，通过 `admin-web` 服务纳入 `docker compose`；其 `vite.config.js` 默认代理到 `http://localhost:8080`，仅适用于本机 `go run .`。联调上述服务器时把 target 改为 `http://159.195.218.222:1008`（nginx 会把 `/api` 反代到 `server:8080`），该改动只用于本地，不要提交硬编码地址。
 - 敏感值用 `APP_` 前缀环境变量覆盖（如 `APP_MYSQL_HOST`、`APP_JWT_SECRET`），`internal/config` 已设 `SetEnvKeyReplacer`，不要改回。
 - 表结构由 `server/migrations/001_init.sql` 显式管理，仅在 mysql 数据卷首次初始化时执行；生产用 `APP_SERVER_MODE=release` 关闭 GORM 自动迁移。已有数据卷不会重跑初始化脚本，后续改表结构需新增迁移文件。

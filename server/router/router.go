@@ -13,6 +13,12 @@ import (
 // admin 分组统一经过管理员鉴权中间件；各 service / controller 依赖在此装配。
 func Register(r *gin.Engine, db *gorm.DB) {
 	v1 := r.Group("/api/v1")
+
+	// 登录接口独立成免鉴权组，必须在 AdminRequired 之前注册
+	public := v1.Group("/admin")
+	authCtl := controller.NewAuthController()
+	public.POST("/login", authCtl.Login)
+
 	admin := v1.Group("/admin")
 	admin.Use(middleware.AdminRequired())
 
