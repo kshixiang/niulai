@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import TabbarLayout from '@/layouts/TabbarLayout.vue'
+import { getToken } from '@/utils/auth'
 
 const routes = [
   {
@@ -8,9 +9,9 @@ const routes = [
     redirect: '/home',
     children: [
       { path: 'home',   name: 'home',   component: () => import('@/views/Home.vue'),   meta: { title: '首页' } },
-      { path: 'orders', name: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '订单' } },
-      { path: 'agent',  name: 'agent',  component: () => import('@/views/Agent.vue'),  meta: { title: '代理' } },
-      { path: 'mine',   name: 'mine',   component: () => import('@/views/Mine.vue'),   meta: { title: '我的' } },
+      { path: 'orders', name: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '订单', requiresAuth: true } },
+      { path: 'agent',  name: 'agent',  component: () => import('@/views/Agent.vue'),  meta: { title: '代理', requiresAuth: true } },
+      { path: 'mine',   name: 'mine',   component: () => import('@/views/Mine.vue'),   meta: { title: '我的', requiresAuth: true } },
     ],
   },
   { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { title: '登录' } },
@@ -25,8 +26,11 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} · 牛来充值` : '牛来充值'
-  // 需要鉴权时给路由加 meta.requiresAuth，再引入 getToken：
-  // if (to.meta.requiresAuth && !getToken()) return { name: 'login', query: { redirect: to.fullPath } }
+  // 用 getToken 而非 useUserStore，避免 router → store → api → request → router 循环依赖
+  if (to.meta.requiresAuth && !getToken()) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.name === 'login' && getToken()) return { name: 'home' }
   return true
 })
 

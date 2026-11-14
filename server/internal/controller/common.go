@@ -58,7 +58,15 @@ func normalizePage(page, pageSize int) (int, int) {
 // handleServiceError 将 service 层错误映射为统一响应。
 func handleServiceError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, service.ErrProductNotFound),
+	// 登录/注册业务失败用 400，避免前端拦截器把 401 当作会话失效清 token 并跳转
+	case errors.Is(err, service.ErrPhoneExists),
+		errors.Is(err, service.ErrInvalidCredential),
+		errors.Is(err, service.ErrPasswordTooLong):
+		response.Fail(c, response.CodeInvalidParam, err.Error())
+	case errors.Is(err, service.ErrUserDisabled):
+		response.Fail(c, response.CodeForbidden, err.Error())
+	case errors.Is(err, service.ErrUserNotFound),
+		errors.Is(err, service.ErrProductNotFound),
 		errors.Is(err, service.ErrChannelNotFound),
 		errors.Is(err, gorm.ErrRecordNotFound):
 		response.Fail(c, response.CodeNotFound, err.Error())

@@ -17,23 +17,39 @@ const load = async () => {
     productTotal.value = null
   }
 }
-onMounted(load)
+
+// 凭 token 恢复用户资料，同时校验会话是否仍有效（全站唯一的会话校验点）
+const loadProfile = async () => {
+  if (!user.token) return
+  try {
+    await user.fetchProfile()
+  } catch {
+    // 拦截器会统一提示并清理过期 token
+  }
+}
+
+onMounted(() => { load(); loadProfile() })
 
 const logout = () => { user.logout(); router.replace('/login') }
+const goLogin = () => router.replace('/login')
 </script>
 
 <template>
   <div class="mine page--scroll">
     <div class="mine__avatar"><van-icon name="user-o" size="34" /></div>
-    <h2>我的</h2>
-    <p class="mine__sub">账户与设置</p>
+    <h2>{{ user.userInfo?.nickname || '未登录' }}</h2>
+    <p class="mine__sub">
+      {{ user.userInfo?.phone || '账户与设置' }}
+      <span v-if="user.userInfo?.status === 0" class="mine__tag">已禁用</span>
+    </p>
 
     <div class="mine__stat">
       <span class="mine__stat-label">当前在售商品</span>
       <span class="mine__stat-value">{{ productTotal === null ? '—' : `${productTotal} 件` }}</span>
     </div>
 
-    <van-button block round class="mine__btn" @click="logout">退出登录</van-button>
+    <van-button v-if="user.token" block round class="mine__btn" @click="logout">退出登录</van-button>
+    <van-button v-else block round class="mine__btn mine__btn--primary" @click="goLogin">去登录</van-button>
   </div>
 </template>
 
@@ -46,6 +62,10 @@ const logout = () => { user.logout(); router.replace('/login') }
 }
 h2 { font-size: 20px; color: var(--text-primary); }
 .mine__sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.mine__tag {
+  margin-left: 8px; padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; color: var(--c-danger); background: rgba(255, 92, 108, .16);
+}
 .mine__stat {
   display: flex; align-items: center; justify-content: space-between;
   margin: 28px 0 24px; padding: 16px;
@@ -56,4 +76,6 @@ h2 { font-size: 20px; color: var(--text-primary); }
 .mine__stat-value { font-size: 15px; font-weight: 800; color: var(--c-accent); }
 .mine__btn { background: var(--c-surface-2); border: 1px solid var(--border-card); color: var(--text-secondary); }
 .mine__btn :deep(.van-button__text) { color: var(--text-secondary); }
+.mine__btn--primary { background: var(--gradient-brand); border: none; color: #fff; font-weight: 700; }
+.mine__btn--primary :deep(.van-button__text) { color: #fff; }
 </style>

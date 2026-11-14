@@ -24,21 +24,23 @@ func NewChannelService(db *gorm.DB) *ChannelService {
 	return &ChannelService{db: db}
 }
 
-// CreateChannelRequest 新增渠道请求
+// CreateChannelRequest 新增渠道请求。登录地址与登录密码为选填。
 type CreateChannelRequest struct {
-	Name   string `json:"name" binding:"required,max=128"`
-	APIURL string `json:"api_url" binding:"required,max=512"`
-	APIKey string `json:"api_key" binding:"required,max=255"`
-	Status int8   `json:"status" binding:"oneof=0 1"`
+	Name     string `json:"name" binding:"required,max=128"`
+	Category string `json:"category" binding:"required,oneof=话费 卡券"`
+	APIURL   string `json:"api_url" binding:"omitempty,max=512"`
+	APIKey   string `json:"api_key" binding:"omitempty,max=255"`
+	Status   int8   `json:"status" binding:"oneof=0 1"`
 }
 
 // UpdateChannelRequest 更新渠道请求。
-// api_url / api_key 为空表示不修改（列表不回显密钥，编辑时无法原样带回）。
+// api_url / api_key 为空表示不修改（列表不回显密码，编辑时无法原样带回）。
 type UpdateChannelRequest struct {
-	Name   string `json:"name" binding:"required,max=128"`
-	APIURL string `json:"api_url" binding:"omitempty,max=512"`
-	APIKey string `json:"api_key" binding:"omitempty,max=255"`
-	Status int8   `json:"status" binding:"oneof=0 1"`
+	Name     string `json:"name" binding:"required,max=128"`
+	Category string `json:"category" binding:"required,oneof=话费 卡券"`
+	APIURL   string `json:"api_url" binding:"omitempty,max=512"`
+	APIKey   string `json:"api_key" binding:"omitempty,max=255"`
+	Status   int8   `json:"status" binding:"oneof=0 1"`
 }
 
 // ListChannelRequest 渠道分页查询
@@ -50,10 +52,11 @@ type ListChannelRequest struct {
 // Create 新增渠道
 func (s *ChannelService) Create(ctx context.Context, req *CreateChannelRequest) (*model.Channel, error) {
 	ch := &model.Channel{
-		Name:   req.Name,
-		APIURL: req.APIURL,
-		APIKey: req.APIKey,
-		Status: req.Status,
+		Name:     req.Name,
+		Category: req.Category,
+		APIURL:   req.APIURL,
+		APIKey:   req.APIKey,
+		Status:   req.Status,
 	}
 	if err := s.db.WithContext(ctx).Create(ch).Error; err != nil {
 		return nil, fmt.Errorf("创建渠道失败: %w", err)
@@ -80,7 +83,7 @@ func (s *ChannelService) List(ctx context.Context, page, pageSize int) ([]model.
 	return list, total, nil
 }
 
-// Update 更新渠道信息。api_url / api_key 仅在非空时覆盖，避免编辑时清空密钥。
+// Update 更新渠道信息。api_url / api_key 仅在非空时覆盖，避免编辑时清空密码。
 func (s *ChannelService) Update(ctx context.Context, id uint64, req *UpdateChannelRequest) (*model.Channel, error) {
 	var ch model.Channel
 	if err := s.db.WithContext(ctx).First(&ch, id).Error; err != nil {
@@ -90,6 +93,7 @@ func (s *ChannelService) Update(ctx context.Context, id uint64, req *UpdateChann
 		return nil, fmt.Errorf("查询渠道失败: %w", err)
 	}
 	ch.Name = req.Name
+	ch.Category = req.Category
 	if req.APIURL != "" {
 		ch.APIURL = req.APIURL
 	}

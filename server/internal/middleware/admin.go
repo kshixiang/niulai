@@ -21,7 +21,8 @@ func AdminRequired() gin.HandlerFunc {
 		}
 
 		claims, err := jwt.Verify(strings.TrimPrefix(auth, "Bearer "), config.GlobalConfig.JWT.Secret)
-		if err != nil {
+		// 用户令牌与管理端共用密钥，必须校验角色，防止用户令牌越权访问后台接口
+		if err != nil || claims.Role != jwt.RoleAdmin {
 			response.Fail(c, response.CodeUnauthorized, "登录已失效，请重新登录")
 			c.Abort()
 			return

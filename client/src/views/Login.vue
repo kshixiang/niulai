@@ -1,32 +1,128 @@
 <script setup>
+import { ref, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
+import { login, register } from '@/api'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const user = useUserStore()
 
-// 当前 C 端查询接口均为公开接口，无需鉴权；此处保留演示登录入口，
-// 后续接入用户体系时再替换为真实登录请求。
-const login = () => {
-  user.saveToken('mock-token-123456')
-  showToast('登录成功')
-  router.replace(String(route.query.redirect || '/home'))
+const mode = ref('login') // login / register
+const submitting = ref(false)
+const form = reactive({ phone: '', password: '', nickname: '', confirm: '' })
+
+const validate = () => {
+  if (!/^\d{11}$/.test(form.phone)) {
+    showToast('请输入正确的11位手机号')
+    return false
+  }
+  if (!form.password) {
+    showToast('请输入密码')
+    return false
+  }
+  if (mode.value === 'register') {
+    if (form.password.length < 6) {
+      showToast('密码至少6位')
+      return false
+    }
+    if (form.password !== form.confirm) {
+      showToast('两次输入的密码不一致')
+      return false
+    }
+  }
+  return true
+}
+
+const submit = async () => {
+  if (submitting.value || !validate()) return
+  submitting.value = true
+  try {
+    const payload = mode.value === 'login'
+      ? { phone: form.phone, password: form.password }
+      : { phone: form.phone, password: form.password, nickname: form.nickname.trim() }
+    // 拦截器已解包 data → { token, user }
+    const data = mode.value === 'login' ? await login(payload) : await register(payload)
+    user.saveToken(data.token)
+    user.setUserInfo(data.user)
+    showToast(mode.value === 'login' ? '登录成功' : '注册成功')
+    router.replace(String(route.query.redirect || '/home'))
+  } catch {
+    // 错误提示由 request.js 拦截器统一弹出，此处不重复提示
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
 <template>
   <div class="login">
-    <div class="login__logo">牛</div>
-    <h1>牛来充值</h1>
-    <p>登录后查看订单与代理权益</p>
-    <van-button block round class="login__btn" @click="login">一键模拟登录</van-button>
+    <div class="login__brand">
+      <div class="login__logo">牛</div>
+      <h1>牛来充值</h1>
+      <p>登录后查看订单与代理权益</p>
+    </div>
+
+    <van-tabs v-model:active="mode" class="login__tabs">
+      <van-tab name="login" title="登录" />
+      <van-tab name="register" title="注册" />
+    </van-tabs>
+
+    <van-cell-group inset class="login__form">
+      <van-field
+        v-model="form.phone"
+        type="tel"
+        label="手机号"
+        placeholder="请输入11位手机号"
+        maxlength="11"
+        clearable
+      />
+      <van-field
+        v-model="form.password"
+        type="password"
+        label="密码"
+        placeholder="请输入密码"
+        clearable
+      />
+      <template v-if="mode === 'register'">
+        <van-field
+          v-model="form.nickname"
+          label="昵称"
+          placeholder="选填，不填自动生成"
+          maxlength="64"
+          clearable
+        />
+        <van-field
+          v-model="form.confirm"
+          type="password"
+          label="确认密码"
+          placeholder="请再次输入密码"
+          clearable
+        />
+      </template>
+    </van-cell-group>
+
+    <van-button
+      block
+      round
+      class="login__btn"
+      :loading="submitting"
+      :disabled="submitting"
+      @click="submit"
+    >{{ mode === 'login' ? '登录' : '注册并登录' }}</van-button>
   </div>
 </template>
 
 <style scoped>
-.login { min-height: 100%; padding: 120px 28px 0; text-align: center; background: var(--bg-page); }
+.login {
+  height: 100%;
+  overflow-y: auto;
+  padding: 64px 20px 40px;
+  background: var(--bg-page);
+  --van-field-label-color: var(--text-secondary);
+}
+.login__brand { text-align: center; margin-bottom: 28px; }
 .login__logo {
   width: 68px; height: 68px; margin: 0 auto 20px;
   display: grid; place-items: center; border-radius: 20px;
@@ -34,7 +130,10 @@ const login = () => {
   box-shadow: 0 10px 26px rgba(123, 92, 255, .4);
 }
 h1 { font-size: 22px; color: var(--text-primary); }
-p  { font-size: 12px; color: var(--text-muted); margin: 8px 0 40px; }
+p  { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
+.login__tabs { margin-bottom: 16px; }
+.login__form { margin-bottom: 24px; }
+.login :deep(.van-field__control::placeholder) { color: var(--text-muted); }
 .login__btn { background: var(--gradient-brand); border: none; color: #fff; font-weight: 700; }
 .login__btn :deep(.van-button__text) { color: #fff; }
 </style>

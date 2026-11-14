@@ -16,8 +16,12 @@ const visible = computed({
 const isEdit = computed(() => !!props.channel?.id)
 const title = computed(() => (isEdit.value ? '编辑渠道' : '新增渠道'))
 
+// 与商品类型、后端 binding:"oneof=话费 卡券" 保持一致
+const CATEGORY_OPTIONS = ['话费', '卡券']
+
 const emptyForm = () => ({
   name: '',
+  category: '',
   api_url: '',
   api_key: '',
   status: 1, // 1=可用 0=熔断
@@ -29,25 +33,16 @@ const submitting = ref(false)
 
 const rules = {
   name: [{ required: true, message: '请输入渠道名称', trigger: 'blur' }],
-  api_url: [{ required: true, message: '请输入接口地址', trigger: 'blur' }],
-  api_key: [
-    {
-      // 后端不回显密钥，编辑时留空表示不修改
-      validator: (rule, value, callback) => {
-        if (!isEdit.value && !value) return callback(new Error('请输入接口密钥'))
-        callback()
-      },
-      trigger: 'blur',
-    },
-  ],
+  category: [{ required: true, message: '请选择商品分类', trigger: 'change' }],
 }
 
 function pick(c) {
   if (!c) return {}
   return {
     name: c.name ?? '',
+    category: c.category ?? '',
     api_url: c.api_url ?? '',
-    api_key: '',
+    api_key: '', // 后端不回显登录密码
     status: c.status ?? 1,
   }
 }
@@ -66,8 +61,13 @@ async function submit() {
   if (!ok) return
   submitting.value = true
   try {
-    // api_key 留空时不提交，后端保持原密钥不变
-    const payload = { name: form.name, api_url: form.api_url, status: form.status }
+    // 登录地址/密码选填；密码留空时不提交，后端保持原值不变
+    const payload = {
+      name: form.name,
+      category: form.category,
+      status: form.status,
+    }
+    if (form.api_url) payload.api_url = form.api_url
     if (form.api_key) payload.api_key = form.api_key
     if (isEdit.value) await updateChannel(props.channel.id, payload)
     else await createChannel(payload)
@@ -94,18 +94,30 @@ async function submit() {
         <el-input v-model="form.name" placeholder="如：渠道A" maxlength="128" show-word-limit clearable />
       </el-form-item>
 
-      <el-form-item label="接口地址" prop="api_url">
-        <el-input v-model="form.api_url" placeholder="上游充值接口地址" maxlength="512" show-word-limit clearable />
+      <el-form-item label="商品分类" prop="category">
+        <el-select v-model="form.category" placeholder="请选择商品分类" style="width: 100%">
+          <el-option v-for="c in CATEGORY_OPTIONS" :key="c" :label="c" :value="c" />
+        </el-select>
       </el-form-item>
 
-      <el-form-item label="接口密钥" prop="api_key">
+      <el-form-item label="登录地址" prop="api_url">
+        <el-input
+          v-model="form.api_url"
+          placeholder="选填，上游平台登录地址"
+          maxlength="512"
+          show-word-limit
+          clearable
+        />
+      </el-form-item>
+
+      <el-form-item label="登录密码" prop="api_key">
         <el-input
           v-model="form.api_key"
           type="password"
           show-password
           clearable
           maxlength="255"
-          :placeholder="isEdit ? '留空则不修改原密钥' : '请输入接口密钥'"
+          :placeholder="isEdit ? '选填，留空则不修改原密码' : '选填，上游平台登录密码'"
         />
       </el-form-item>
 

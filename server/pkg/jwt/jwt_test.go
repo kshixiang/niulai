@@ -82,3 +82,51 @@ func TestSignRejectsInvalidArgs(t *testing.T) {
 		t.Fatal("非正有效期应报错")
 	}
 }
+
+func TestSignEmitsAdminRole(t *testing.T) {
+	token, err := Sign("admin", testSecret, 24)
+	if err != nil {
+		t.Fatalf("签发失败: %v", err)
+	}
+	claims, err := Verify(token, testSecret)
+	if err != nil {
+		t.Fatalf("校验失败: %v", err)
+	}
+	if claims.Role != RoleAdmin {
+		t.Fatalf("管理员令牌角色不符: %s", claims.Role)
+	}
+}
+
+func TestSignUserEmitsUserRole(t *testing.T) {
+	token, err := SignUser(42, testSecret, 24)
+	if err != nil {
+		t.Fatalf("签发失败: %v", err)
+	}
+	claims, err := Verify(token, testSecret)
+	if err != nil {
+		t.Fatalf("校验失败: %v", err)
+	}
+	if claims.Role != RoleUser {
+		t.Fatalf("用户令牌角色不符: %s", claims.Role)
+	}
+	if claims.Sub != "42" {
+		t.Fatalf("用户令牌主体不符: %s", claims.Sub)
+	}
+	if _, err := SignUser(0, testSecret, 24); err == nil {
+		t.Fatal("零用户ID应报错")
+	}
+}
+
+func TestVerifyAcceptsLegacyNoRolePayload(t *testing.T) {
+	// 历史令牌无 role 字段，Verify 仍应能解析（角色校验在中间件完成）
+	p := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"admin","iat":1,"exp":9999999999}`))
+	unsigned := header + "." + p
+	token := unsigned + "." + sign(unsigned, testSecret)
+	claims, err := Verify(token, testSecret)
+	if err != nil {
+		t.Fatalf("历史令牌校验失败: %v", err)
+	}
+	if claims.Role != "" {
+		t.Fatalf("历史令牌不应带角色: %s", claims.Role)
+	}
+}

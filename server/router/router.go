@@ -25,6 +25,14 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	v1.GET("/orders", clientCtl.ListOrders)
 	v1.GET("/agents", clientCtl.ListAgents)
 
+	// C 端用户认证：注册/登录免鉴权，资料查询需 UserRequired
+	userSvc := service.NewUserService(db)
+	userCtl := controller.NewUserController(userSvc)
+	auth := v1.Group("/auth")
+	auth.POST("/register", userCtl.Register)
+	auth.POST("/login", userCtl.Login)
+	auth.GET("/profile", middleware.UserRequired(), userCtl.Profile)
+
 	// 登录接口独立成免鉴权组，必须在 AdminRequired 之前注册
 	public := v1.Group("/admin")
 	authCtl := controller.NewAuthController()

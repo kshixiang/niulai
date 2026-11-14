@@ -42,10 +42,20 @@ function onPageSizeChange() {
 async function handleStatusChange(row) {
   // @change 时 v-model 已是新值，先记旧值用于失败回滚
   const origin = row.status === 1 ? 0 : 1
+  // 迁移前创建的旧渠道没有分类，先引导补全，避免提交被后端校验拒绝
+  if (!row.category) {
+    ElMessage.warning('请先编辑该渠道，设置商品分类')
+    row.status = origin
+    return
+  }
   row.statusLoading = true
   try {
-    // 后端 Update 的 api_url / api_key 可省略，仅提交名称与状态
-    await updateChannel(row.id, { name: row.name, status: row.status })
+    // 后端 Update 要求 name / category 必填，登录地址与密码可省略
+    await updateChannel(row.id, {
+      name: row.name,
+      category: row.category,
+      status: row.status,
+    })
     ElMessage.success(row.status === 1 ? '已设为可用' : '已设为熔断')
   } catch {
     row.status = origin
@@ -69,7 +79,13 @@ onMounted(loadData)
     <el-table v-loading="loading" :data="rows" border stripe row-key="id" class="table">
       <el-table-column prop="id" label="ID" width="90" align="center" />
       <el-table-column prop="name" label="渠道名称" min-width="140" show-overflow-tooltip />
-      <el-table-column label="接口地址" min-width="220" show-overflow-tooltip>
+      <el-table-column label="商品分类" width="110" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.category" type="info" effect="plain" size="small">{{ row.category }}</el-tag>
+          <span v-else>—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="登录地址" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">{{ row.api_url || '—' }}</template>
       </el-table-column>
       <el-table-column label="健康状态" width="130" align="center">

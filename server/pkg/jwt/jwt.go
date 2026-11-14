@@ -1,4 +1,4 @@
-// Package jwt 提供后台管理员登录所需的 HS256 令牌签发与校验。
+// Package jwt 提供后台管理员与 C 端用户登录所需的 HS256 令牌签发与校验。
 // 仅依赖标准库，避免为简单的签发/校验场景引入外部依赖。
 package jwt
 
@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,19 +22,40 @@ var (
 	ErrExpiredToken = errors.New("登录已过期")
 )
 
+// 令牌角色：管理员与 C 端用户共用同一密钥，靠 role 区分，
+// 由各自的鉴权中间件校验，避免用户令牌访问后台接口或反之。
+const (
+	RoleAdmin = "admin"
+	RoleUser  = "user"
+)
+
 // header 固定为 HS256；Verify 会重新解析并只接受该算法，
 // 以拒绝 alg=none 与算法混淆攻击。
 var header = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 
 // Claims 令牌载荷，只包含本系统需要的最小字段。
+// Role 用 omitempty 兼容无角色的历史令牌，校验交由中间件处理。
 type Claims struct {
-	Sub string `json:"sub"` // 管理员用户名
-	Iat int64  `json:"iat"` // 签发时间（Unix 秒）
-	Exp int64  `json:"exp"` // 过期时间（Unix 秒）
+	Sub  string `json:"sub"`            // 主体：管理员用户名或用户ID
+	Iat  int64  `json:"iat"`            // 签发时间（Unix 秒）
+	Exp  int64  `json:"exp"`            // 过期时间（Unix 秒）
+	Role string `json:"role,omitempty"` // 角色
 }
 
-// Sign 签发 HS256 令牌，expireHours 为有效期（小时）。
+// Sign 签发管理员令牌（后台登录使用），expireHours 为有效期（小时）。
 func Sign(subject, secret string, expireHours int) (string, error) {
+	return signToken(subject, RoleAdmin, secret, expireHours)
+}
+
+// SignUser 签发 C 端用户令牌，主体为用户ID，角色为 RoleUser。
+func SignUser(userID uint64, secret string, expireHours int) (string, error) {
+	if userID == 0 {
+		return "", errors.New("用户ID不能为空")
+	}
+	return signToken(strconv.FormatUint(userID, 10), RoleUser, secret, expireHours)
+}
+
+func signToken(subject, role, secret string, expireHours int) (string, error) {
 	if secret == "" {
 		return "", errors.New("JWT 密钥不能为空")
 	}
@@ -46,9 +68,10 @@ func Sign(subject, secret string, expireHours int) (string, error) {
 
 	now := time.Now().Unix()
 	payload, err := json.Marshal(Claims{
-		Sub: subject,
-		Iat: now,
-		Exp: now + int64(expireHours)*3600,
+		Sub:  subject,
+		Iat:  now,
+		Exp:  now + int64(expireHours)*3600,
+		Role: role,
 	})
 	if err != nil {
 		return "", fmt.Errorf("序列化令牌载荷失败: %w", err)
