@@ -70,10 +70,12 @@ else
     base="$(basename "$f")"
     [ "$base" = "001_init.sql" ] && continue
     echo "    -> $base"
-    if $DC exec -T mysql mysql -uroot "-p${MYSQL_ROOT_PASSWORD}" niulai < "$f"; then
-      :
-    else
-      echo "    警告：$base 执行失败，请检查后手动处理。" >&2
+    out="$($DC exec -T mysql mysql -uroot "-p${MYSQL_ROOT_PASSWORD}" niulai < "$f" 2>&1)"
+    rc=$?
+    # 数据卷已存在时，挂载目录里的 SQL 不会自动重跑；「对象已存在」类错误属预期，可安全跳过
+    if [ "$rc" -ne 0 ] && ! echo "$out" | grep -Eq 'ERROR (1050|1060|1061|1062|1072)|already exists|Duplicate'; then
+      echo "    警告：$base 执行失败：" >&2
+      echo "$out" | sed 's/^/      /' >&2
     fi
   done
 fi
