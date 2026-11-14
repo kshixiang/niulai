@@ -26,6 +26,18 @@ const routes = [
         component: () => import('@/views/UserManage.vue'),
         meta: { title: '用户管理' },
       },
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('@/views/SettingManage.vue'),
+        meta: { title: '系统设置' },
+      },
+      {
+        path: 'register-codes',
+        name: 'RegisterCodes',
+        component: () => import('@/views/RegisterCodeManage.vue'),
+        meta: { title: '注册码' },
+      },
     ],
   },
   {

@@ -18,6 +18,13 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	uploadCtl := controller.NewUploadController()
 	v1.GET("/uploads/:filename", uploadCtl.ServeUpload)
 
+	// 系统设置与注册码：注册配置公开只读，后台读写走 admin 鉴权组
+	settingSvc := service.NewSettingService(db)
+	settingCtl := controller.NewSettingController(settingSvc)
+	v1.GET("/register-config", settingCtl.RegisterConfig)
+	codeSvc := service.NewRegisterCodeService(db)
+	codeCtl := controller.NewRegisterCodeController(codeSvc)
+
 	// C 端公开接口：无需鉴权，只返回可对外展示的字段
 	clientSvc := service.NewClientService(db)
 	clientCtl := controller.NewClientController(clientSvc)
@@ -26,7 +33,7 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	v1.GET("/agents", clientCtl.ListAgents)
 
 	// C 端用户认证：注册/登录免鉴权，资料查询需 UserRequired
-	userSvc := service.NewUserService(db)
+	userSvc := service.NewUserService(db, settingSvc, codeSvc)
 	userCtl := controller.NewUserController(userSvc)
 	auth := v1.Group("/auth")
 	auth.POST("/register", userCtl.Register)
@@ -41,6 +48,14 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	admin := v1.Group("/admin")
 	admin.Use(middleware.AdminRequired())
 	admin.POST("/upload/cover", uploadCtl.UploadCover)
+	admin.GET("/settings", settingCtl.Get)
+	admin.PUT("/settings", settingCtl.Update)
+
+	// 注册码管理（后台生成、启用/禁用）
+	codes := admin.Group("/register-codes")
+	codes.POST("", codeCtl.Generate)
+	codes.GET("", codeCtl.List)
+	codes.PUT("/:id/status", codeCtl.UpdateStatus)
 
 	// 渠道管理
 	channelSvc := service.NewChannelService(db)

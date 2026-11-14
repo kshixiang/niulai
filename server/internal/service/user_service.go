@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -14,11 +15,13 @@ import (
 
 // 用户认证相关业务错误。
 var (
-	ErrPhoneExists       = errors.New("该账号已注册")
-	ErrInvalidCredential = errors.New("账号或密码错误")
-	ErrPasswordTooLong   = errors.New("密码过长，请缩短后重试")
-	ErrUserDisabled      = errors.New("账号已被禁用，请联系客服")
-	ErrUserNotFound      = errors.New("用户不存在")
+	ErrPhoneExists          = errors.New("该账号已注册")
+	ErrInvalidCredential    = errors.New("账号或密码错误")
+	ErrPasswordTooLong      = errors.New("密码过长，请缩短后重试")
+	ErrUserDisabled         = errors.New("账号已被禁用，请联系客服")
+	ErrUserNotFound         = errors.New("用户不存在")
+	ErrRegisterCodeRequired = errors.New("请填写注册码")
+	ErrRegisterCodeInvalid  = errors.New("注册码无效或已禁用")
 )
 
 // bcrypt 对密码有 72 字节上限；validator 的 max 按字符数计算，
@@ -27,11 +30,13 @@ const maxPasswordBytes = 72
 
 // ---------- 请求参数 ----------
 
-// UserRegisterRequest 用户注册请求。登录账号必填，长度 3~20，不限手机号格式。
+// UserRegisterRequest 用户注册请求。登录账号必填，长度 3~20，不限手机号格式；
+// 注册码是否必填由后台系统设置控制。
 type UserRegisterRequest struct {
-	Phone    string `json:"phone"    binding:"required,min=3,max=20"`
-	Password string `json:"password" binding:"required,min=6,max=72"`
-	Nickname string `json:"nickname" binding:"omitempty,max=64"`
+	Phone        string `json:"phone"         binding:"required,min=3,max=20"`
+	Password     string `json:"password"      binding:"required,min=6,max=72"`
+	Nickname     string `json:"nickname"      binding:"omitempty,max=64"`
+	RegisterCode string `json:"register_code" binding:"omitempty,max=32"`
 }
 
 // UserLoginRequest 用户登录请求。
@@ -65,17 +70,22 @@ func toUserView(u *model.User) *UserView {
 
 // UserService C 端用户认证服务。
 type UserService struct {
-	db *gorm.DB
+	db       *gorm.DB
+	settings *SettingService
+	codes    *RegisterCodeService
 }
 
-func NewUserService(db *gorm.DB) *UserService {
-	return &UserService{db: db}
+func NewUserService(db *gorm.DB, settings *SettingService, codes *RegisterCodeService) *UserService {
+	return &UserService{db: db, settings: settings, codes: codes}
 }
 
 // Register 注册用户并返回对外视图，controller 据此签发令牌实现注册即登录。
 func (s *UserService) Register(ctx context.Context, req *UserRegisterRequest) (*UserView, error) {
 	if len([]byte(req.Password)) > maxPasswordBytes {
 		return nil, ErrPasswordTooLong
+	}
+	if err := s.checkRegisterCode(ctx, req.RegisterCode); err != nil {
+		return nil, err
 	}
 	if s.accountExists(ctx, req.Phone) {
 		return nil, ErrPhoneExists
@@ -109,6 +119,23 @@ func (s *UserService) Register(ctx context.Context, req *UserRegisterRequest) (*
 		return nil, fmt.Errorf("创建用户失败: %w", err)
 	}
 	return toUserView(u), nil
+}
+
+// checkRegisterCode 按后台开关决定是否必填，并交由 RegisterCodeService
+// 校验注册码有效性及其绑定的邀请人。
+func (s *UserService) checkRegisterCode(ctx context.Context, code string) error {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		required, err := s.settings.IsRegisterCodeRequired(ctx)
+		if err != nil {
+			return err
+		}
+		if required {
+			return ErrRegisterCodeRequired
+		}
+		return nil
+	}
+	return s.codes.Validate(ctx, code)
 }
 
 // accountExists 判重需 Unscoped：软删除过的账号仍占用唯一索引，否则重注会触发数据库报错。

@@ -1,8 +1,8 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { login, register } from '@/api'
+import { login, register, getRegisterConfig } from '@/api'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -11,7 +11,18 @@ const user = useUserStore()
 
 const mode = ref('login') // login / register
 const submitting = ref(false)
-const form = reactive({ phone: '', password: '', nickname: '', confirm: '' })
+const form = reactive({ phone: '', password: '', nickname: '', confirm: '', registerCode: '' })
+const registerCodeRequired = ref(false)
+
+// 注册码是否必填由管理后台控制
+onMounted(async () => {
+  try {
+    const data = await getRegisterConfig()
+    registerCodeRequired.value = !!data.register_code_required
+  } catch {
+    // 拉取失败时按非强制处理，提交时由后端兜底校验
+  }
+})
 
 const validate = () => {
   const account = form.phone.trim()
@@ -36,6 +47,10 @@ const validate = () => {
       showToast('两次输入的密码不一致')
       return false
     }
+    if (registerCodeRequired.value && !form.registerCode.trim()) {
+      showToast('请输入注册码')
+      return false
+    }
   }
   return true
 }
@@ -47,7 +62,12 @@ const submit = async () => {
     const account = form.phone.trim()
     const payload = mode.value === 'login'
       ? { phone: account, password: form.password }
-      : { phone: account, password: form.password, nickname: form.nickname.trim() }
+      : {
+          phone: account,
+          password: form.password,
+          nickname: form.nickname.trim(),
+          register_code: form.registerCode.trim(),
+        }
     // 拦截器已解包 data → { token, user }
     const data = mode.value === 'login' ? await login(payload) : await register(payload)
     user.saveToken(data.token)
@@ -92,6 +112,14 @@ const submit = async () => {
         clearable
       />
       <template v-if="mode === 'register'">
+        <van-field
+          v-model="form.registerCode"
+          label="注册码"
+          :placeholder="registerCodeRequired ? '请输入邀请人的注册码' : '选填，邀请人的注册码'"
+          :required="registerCodeRequired"
+          maxlength="32"
+          clearable
+        />
         <van-field
           v-model="form.nickname"
           label="昵称"

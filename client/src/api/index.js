@@ -13,6 +13,9 @@ export const getOrders = (params) => request.get(`${CLIENT}/orders`, { params })
 // 代理 GET /api/v1/agents?page=&page_size=
 export const getAgents = (params) => request.get(`${CLIENT}/agents`, { params })
 
+// 注册配置 GET /api/v1/register-config → { register_code_required }
+export const getRegisterConfig = () => request.get(`${CLIENT}/register-config`)
+
 // 用户注册 POST /api/v1/auth/register
 export const register = (data) => request.post(`${CLIENT}/auth/register`, data)
 
