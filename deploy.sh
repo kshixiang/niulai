@@ -24,11 +24,19 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-# 读取 .env 供迁移步骤使用（仅 KEY=VALUE，支持 # 注释行）
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+# 从 .env 安全读取单个 KEY 的值：只做文本解析，不把 .env 当作脚本执行，
+# 因此文件里有空白行、注释或偶发的异常行都不会让脚本崩溃。
+load_env_value() {
+  local key="$1" val
+  val="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" .env 2>/dev/null | tail -n1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*//")"
+  val="${val%\"}"; val="${val#\"}"
+  val="${val%\'}"; val="${val#\'}"
+  printf '%s' "$val"
+}
+# docker compose 会自动加载同目录的 .env，迁移步骤只需用到 MySQL 密码
+MYSQL_ROOT_PASSWORD="$(load_env_value MYSQL_ROOT_PASSWORD)"
+WEB_PORT="$(load_env_value WEB_PORT)"
+ADMIN_WEB_PORT="$(load_env_value ADMIN_WEB_PORT)"
 
 # ---------- 2. 选择 docker compose 命令 ----------
 if docker compose version >/dev/null 2>&1; then
