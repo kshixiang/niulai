@@ -64,6 +64,30 @@ func (ctl *ClientController) ListOrders(c *gin.Context) {
 	response.Page(c, list, total)
 }
 
+// OrderCounts 订单各状态计数 GET /api/v1/orders/counts
+func (ctl *ClientController) OrderCounts(c *gin.Context) {
+	counts, total, err := ctl.svc.OrderCounts(c.Request.Context())
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
+	response.Success(c, gin.H{"counts": counts, "total": total})
+}
+
+// GetOrder 订单详情 GET /api/v1/orders/:id
+func (ctl *ClientController) GetOrder(c *gin.Context) {
+	id, ok := parseIDParam(c)
+	if !ok {
+		return
+	}
+	v, err := ctl.svc.GetOrder(c.Request.Context(), id)
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
+	response.Success(c, v)
+}
+
 // ListAgents 代理列表 GET /api/v1/agents
 func (ctl *ClientController) ListAgents(c *gin.Context) {
 	var req service.ListClientAgentRequest

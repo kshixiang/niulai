@@ -10,8 +10,14 @@ export const getProducts = (params) => request.get(`${CLIENT}/products`, { param
 // 商品详情（供下单页）GET /api/v1/products/:id
 export const getProductDetail = (id) => request.get(`${CLIENT}/products/${id}`)
 
-// 订单 GET /api/v1/orders?status=&page=&page_size=
+// 订单列表 GET /api/v1/orders?status=&keyword=&search_by=&page=&page_size=
 export const getOrders = (params) => request.get(`${CLIENT}/orders`, { params })
+
+// 订单各状态计数 GET /api/v1/orders/counts → { counts:{0:n,...}, total:n }
+export const getOrderCounts = () => request.get(`${CLIENT}/orders/counts`)
+
+// 订单详情 GET /api/v1/orders/:id
+export const getOrderDetail = (id) => request.get(`${CLIENT}/orders/${id}`)
 
 // 代理 GET /api/v1/agents?page=&page_size=
 export const getAgents = (params) => request.get(`${CLIENT}/agents`, { params })

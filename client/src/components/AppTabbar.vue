@@ -8,7 +8,7 @@
 <template>
   <van-tabbar class="app-tabbar" route fixed :border="false" safe-area-inset-bottom>
     <van-tabbar-item replace to="/home"   icon="home-o">首页</van-tabbar-item>
-    <van-tabbar-item replace to="/orders" icon="orders-o" badge="2">订单</van-tabbar-item>
+    <van-tabbar-item replace to="/orders" icon="orders-o">订单</van-tabbar-item>
     <van-tabbar-item replace to="/agent"  icon="friends-o">代理</van-tabbar-item>
     <van-tabbar-item replace to="/mine"   icon="user-o">我的</van-tabbar-item>
   </van-tabbar>

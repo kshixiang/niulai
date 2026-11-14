@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -17,6 +19,11 @@ import (
 type ClientService struct {
 	db *gorm.DB
 }
+
+// 业务错误
+var (
+	ErrOrderNotFound = errors.New("订单不存在")
+)
 
 func NewClientService(db *gorm.DB) *ClientService {
 	return &ClientService{db: db}
@@ -33,9 +40,11 @@ type ListClientProductRequest struct {
 
 // ListClientOrderRequest 订单查询
 type ListClientOrderRequest struct {
-	Status   *int8 `form:"status"`
-	Page     int   `form:"page"`
-	PageSize int   `form:"page_size"`
+	Status   *int8  `form:"status"`    // 状态过滤：0待接单 1已接单 2已完成 3已取消
+	Keyword  string `form:"keyword"`   // 订单号 / 主充值号码 模糊搜索
+	SearchBy string `form:"search_by"` // all(默认) | order_no | account
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
 }
 
 // ListClientAgentRequest 代理查询
@@ -90,13 +99,15 @@ type ClientProductDetailView struct {
 
 // ClientOrderView 订单对外视图
 type ClientOrderView struct {
-	ID          uint64      `gorm:"column:id"           json:"id"`
-	OrderNo     string      `gorm:"column:order_no"     json:"order_no"`
-	ProductName string      `gorm:"column:product_name" json:"product_name"`
-	Amount      model.Money `gorm:"column:amount"       json:"amount"`
-	Status      int8        `gorm:"column:status"       json:"status"`
-	Account     string      `gorm:"column:account"      json:"account"`
-	CreatedAt   time.Time   `gorm:"column:created_at"   json:"created_at"`
+	ID             uint64      `gorm:"column:id"             json:"id"`
+	OrderNo        string      `gorm:"column:order_no"       json:"order_no"`
+	ProductName    string      `gorm:"column:product_name"   json:"product_name"`
+	Amount         model.Money `gorm:"column:amount"         json:"amount"`
+	ReceivedAmount model.Money `gorm:"column:received_amount" json:"received_amount"`
+	RemainingAmount model.Money `gorm:"-"                     json:"remaining_amount"` // 派生：订单金额 - 已到账金额
+	Status         int8        `gorm:"column:status"         json:"status"`
+	Account        string      `gorm:"column:account"        json:"account"`
+	CreatedAt      time.Time   `gorm:"column:created_at"     json:"created_at"`
 }
 
 // ClientAgentView 代理对外视图
@@ -214,7 +225,7 @@ func (s *ClientService) fieldViews(ctx context.Context, productID uint64) ([]Cli
 	return out, nil
 }
 
-// ListOrders 分页查询订单，关联商品名便于展示；支持按状态过滤。
+// ListOrders 分页查询订单，关联商品名便于展示；支持按状态、关键字（订单号/主充值号码）过滤。
 func (s *ClientService) ListOrders(ctx context.Context, req *ListClientOrderRequest) ([]ClientOrderView, int64, error) {
 	base := func() *gorm.DB {
 		q := s.db.WithContext(ctx).Table("orders o").
@@ -222,6 +233,17 @@ func (s *ClientService) ListOrders(ctx context.Context, req *ListClientOrderRequ
 			Where("o.deleted_at IS NULL")
 		if req.Status != nil {
 			q = q.Where("o.status = ?", *req.Status)
+		}
+		if kw := strings.TrimSpace(req.Keyword); kw != "" {
+			like := "%" + kw + "%"
+			switch req.SearchBy {
+			case "order_no":
+				q = q.Where("o.order_no LIKE ?", like)
+			case "account":
+				q = q.Where("o.account LIKE ?", like)
+			default:
+				q = q.Where("o.order_no LIKE ? OR o.account LIKE ?", like, like)
+			}
 		}
 		return q
 	}
@@ -233,14 +255,57 @@ func (s *ClientService) ListOrders(ctx context.Context, req *ListClientOrderRequ
 
 	list := make([]ClientOrderView, 0)
 	if err := base().
-		Select("o.id, o.order_no, COALESCE(p.name, '') AS product_name, o.amount, o.status, o.account, o.created_at").
+		Select("o.id, o.order_no, COALESCE(p.name, '') AS product_name, o.amount, o.received_amount, o.status, o.account, o.created_at").
 		Order("o.id DESC").
 		Offset((req.Page - 1) * req.PageSize).
 		Limit(req.PageSize).
 		Scan(&list).Error; err != nil {
 		return nil, 0, fmt.Errorf("查询订单失败: %w", err)
 	}
+	for i := range list {
+		list[i].RemainingAmount = list[i].Amount.Sub(list[i].ReceivedAmount)
+	}
 	return list, total, nil
+}
+
+// OrderCounts 统计各状态订单数量与总数，供订单中心状态 tab 角标展示。
+func (s *ClientService) OrderCounts(ctx context.Context) (map[int8]int64, int64, error) {
+	type row struct {
+		Status int8  `gorm:"column:status"`
+		Cnt    int64 `gorm:"column:cnt"`
+	}
+	var rows []row
+	if err := s.db.WithContext(ctx).Table("orders o").
+		Select("o.status AS status, COUNT(*) AS cnt").
+		Where("o.deleted_at IS NULL").
+		Group("o.status").
+		Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("统计订单状态失败: %w", err)
+	}
+	counts := make(map[int8]int64)
+	var total int64
+	for _, r := range rows {
+		counts[r.Status] = r.Cnt
+		total += r.Cnt
+	}
+	return counts, total, nil
+}
+
+// GetOrder 订单详情（供订单详情页），关联商品名；查不到返回 ErrOrderNotFound。
+func (s *ClientService) GetOrder(ctx context.Context, id uint64) (*ClientOrderView, error) {
+	var v ClientOrderView
+	if err := s.db.WithContext(ctx).Table("orders o").
+		Joins("LEFT JOIN products p ON p.id = o.product_id AND p.deleted_at IS NULL").
+		Select("o.id, o.order_no, COALESCE(p.name, '') AS product_name, o.amount, o.received_amount, o.status, o.account, o.created_at").
+		Where("o.id = ? AND o.deleted_at IS NULL", id).
+		Scan(&v).Error; err != nil {
+		return nil, fmt.Errorf("查询订单详情失败: %w", err)
+	}
+	if v.ID == 0 {
+		return nil, ErrOrderNotFound
+	}
+	v.RemainingAmount = v.Amount.Sub(v.ReceivedAmount)
+	return &v, nil
 }
 
 // ListAgents 分页查询代理关系。

@@ -70,6 +70,7 @@ func handleServiceError(c *gin.Context, err error) {
 		response.Fail(c, response.CodeForbidden, err.Error())
 	case errors.Is(err, service.ErrUserNotFound),
 		errors.Is(err, service.ErrProductNotFound),
+		errors.Is(err, service.ErrOrderNotFound),
 		errors.Is(err, service.ErrChannelNotFound),
 		errors.Is(err, service.ErrRegisterCodeNotFound),
 		errors.Is(err, gorm.ErrRecordNotFound):
