@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -29,9 +27,9 @@ const maxPasswordBytes = 72
 
 // ---------- 请求参数 ----------
 
-// UserRegisterRequest 用户注册请求。登录账号选填，留空时由服务端生成唯一账号。
+// UserRegisterRequest 用户注册请求。登录账号必填，长度 3~20，不限手机号格式。
 type UserRegisterRequest struct {
-	Phone    string `json:"phone"    binding:"omitempty,min=3,max=20"`
+	Phone    string `json:"phone"    binding:"required,min=3,max=20"`
 	Password string `json:"password" binding:"required,min=6,max=72"`
 	Nickname string `json:"nickname" binding:"omitempty,max=64"`
 }
@@ -75,20 +73,11 @@ func NewUserService(db *gorm.DB) *UserService {
 }
 
 // Register 注册用户并返回对外视图，controller 据此签发令牌实现注册即登录。
-// 登录账号选填：留空时生成唯一账号，随 UserView.Phone 返回供用户登录。
 func (s *UserService) Register(ctx context.Context, req *UserRegisterRequest) (*UserView, error) {
 	if len([]byte(req.Password)) > maxPasswordBytes {
 		return nil, ErrPasswordTooLong
 	}
-
-	account := req.Phone
-	if account == "" {
-		var err error
-		account, err = s.generateAccount(ctx)
-		if err != nil {
-			return nil, err
-		}
-	} else if s.accountExists(ctx, account) {
+	if s.accountExists(ctx, req.Phone) {
 		return nil, ErrPhoneExists
 	}
 
@@ -99,42 +88,27 @@ func (s *UserService) Register(ctx context.Context, req *UserRegisterRequest) (*
 
 	nickname := req.Nickname
 	if nickname == "" {
-		if len(account) >= 4 {
-			nickname = "用户" + account[len(account)-4:]
+		if len(req.Phone) >= 4 {
+			nickname = "用户" + req.Phone[len(req.Phone)-4:]
 		} else {
-			nickname = "用户" + account
+			nickname = "用户" + req.Phone
 		}
 	}
 
 	u := &model.User{
-		Phone:    account,
+		Phone:    req.Phone,
 		Password: string(hash),
 		Nickname: nickname,
 		Status:   model.UserStatusNormal, // 零值是「封禁」，必须显式赋值
 	}
 	if err := s.db.WithContext(ctx).Create(u).Error; err != nil {
 		// 并发下唯一索引兜底：账号已被占用时统一返回已注册提示，避免 500
-		if s.accountExists(ctx, account) {
+		if s.accountExists(ctx, req.Phone) {
 			return nil, ErrPhoneExists
 		}
 		return nil, fmt.Errorf("创建用户失败: %w", err)
 	}
 	return toUserView(u), nil
-}
-
-// generateAccount 生成唯一登录账号，避免账号留空时触发唯一索引冲突。
-func (s *UserService) generateAccount(ctx context.Context) (string, error) {
-	for i := 0; i < 5; i++ {
-		b := make([]byte, 6)
-		if _, err := rand.Read(b); err != nil {
-			return "", fmt.Errorf("生成登录账号失败: %w", err)
-		}
-		account := "u" + hex.EncodeToString(b)
-		if !s.accountExists(ctx, account) {
-			return account, nil
-		}
-	}
-	return "", fmt.Errorf("生成唯一登录账号失败，请重试")
 }
 
 // accountExists 判重需 Unscoped：软删除过的账号仍占用唯一索引，否则重注会触发数据库报错。

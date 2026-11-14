@@ -15,12 +15,11 @@ const form = reactive({ phone: '', password: '', nickname: '', confirm: '' })
 
 const validate = () => {
   const account = form.phone.trim()
-  // 注册时账号选填（留空由服务端生成）；登录时必须填写
-  if (mode.value === 'login' && !account) {
+  if (!account) {
     showToast('请输入登录账号')
     return false
   }
-  if (account && (account.length < 3 || account.length > 20)) {
+  if (account.length < 3 || account.length > 20) {
     showToast('账号长度需为 3-20 位')
     return false
   }
@@ -53,12 +52,7 @@ const submit = async () => {
     const data = mode.value === 'login' ? await login(payload) : await register(payload)
     user.saveToken(data.token)
     user.setUserInfo(data.user)
-    if (mode.value === 'register' && !account) {
-      // 账号留空时服务端会生成唯一账号，必须让用户看到以便下次登录
-      showToast({ message: `注册成功，登录账号：${data.user.phone}`, duration: 5000 })
-    } else {
-      showToast(mode.value === 'login' ? '登录成功' : '注册成功')
-    }
+    showToast(mode.value === 'login' ? '登录成功' : '注册成功')
     router.replace(String(route.query.redirect || '/home'))
   } catch {
     // 错误提示由 request.js 拦截器统一弹出，此处不重复提示
@@ -86,7 +80,7 @@ const submit = async () => {
         v-model="form.phone"
         type="text"
         label="账号"
-        :placeholder="mode === 'register' ? '手机号或自定义账号，留空自动生成' : '请输入登录账号'"
+        placeholder="请输入登录账号（3-20位，不限手机号）"
         maxlength="20"
         clearable
       />
