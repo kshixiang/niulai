@@ -20,6 +20,12 @@ const routes = [
         component: () => import('@/views/ChannelManage.vue'),
         meta: { title: '渠道管理' },
       },
+      {
+        path: 'users',
+        name: 'Users',
+        component: () => import('@/views/UserManage.vue'),
+        meta: { title: '用户管理' },
+      },
     ],
   },
   {

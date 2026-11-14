@@ -58,4 +58,11 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	products.GET("", productCtl.List)
 	products.PUT("/:id", productCtl.Update)
 	products.PUT("/:id/status", productCtl.UpdateStatus)
+
+	// 用户管理（已注册的 C 端用户）：查询与启用/封禁
+	adminUserSvc := service.NewAdminUserService(db)
+	adminUserCtl := controller.NewAdminUserController(adminUserSvc)
+	users := admin.Group("/users")
+	users.GET("", adminUserCtl.List)
+	users.PUT("/:id/status", adminUserCtl.UpdateStatus)
 }

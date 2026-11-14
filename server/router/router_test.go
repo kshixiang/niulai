@@ -78,7 +78,21 @@ func TestRoleIsolationOnRealRoutes(t *testing.T) {
 	if code := call(t, r, http.MethodGet, "/api/v1/admin/products", userToken); code != 401 {
 		t.Fatalf("用户令牌不应访问后台接口, code=%d", code)
 	}
+	if code := call(t, r, http.MethodGet, "/api/v1/admin/users", userToken); code != 401 {
+		t.Fatalf("用户令牌不应访问用户管理接口, code=%d", code)
+	}
 	if code := call(t, r, http.MethodGet, "/api/v1/auth/profile", adminToken); code != 401 {
 		t.Fatalf("管理员令牌不应访问用户资料接口, code=%d", code)
+	}
+}
+
+func TestAdminUserRoutesProtected(t *testing.T) {
+	r := newTestRouter(t)
+	// 未携带令牌：命中路由后被 AdminRequired 拦截返回 401；若路由未注册会得到 404
+	if code := call(t, r, http.MethodGet, "/api/v1/admin/users", ""); code != 401 {
+		t.Fatalf("用户列表接口未受 AdminRequired 保护, code=%d", code)
+	}
+	if code := call(t, r, http.MethodPut, "/api/v1/admin/users/1/status", ""); code != 401 {
+		t.Fatalf("用户状态接口未受 AdminRequired 保护, code=%d", code)
 	}
 }

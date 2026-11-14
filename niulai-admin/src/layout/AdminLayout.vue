@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Goods, Connection, Shop, SwitchButton, ArrowDown } from '@element-plus/icons-vue'
+import { Goods, Connection, Shop, User, SwitchButton, ArrowDown } from '@element-plus/icons-vue'
 import { getUsername, removeToken, removeUsername } from '@/utils/auth'
 
 const route = useRoute()
@@ -14,6 +14,7 @@ const username = computed(() => getUsername() || '运营管理员')
 const menus = [
   { path: '/products', title: '商品管理', icon: Goods },
   { path: '/channels', title: '渠道管理', icon: Connection },
+  { path: '/users', title: '用户管理', icon: User },
 ]
 
 function logout() {
