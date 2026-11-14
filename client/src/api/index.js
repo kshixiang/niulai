@@ -7,6 +7,9 @@ const CLIENT = '/v1'
 // 在售商品 GET /api/v1/products?type=&page=&page_size=
 export const getProducts = (params) => request.get(`${CLIENT}/products`, { params })
 
+// 商品详情（供下单页）GET /api/v1/products/:id
+export const getProductDetail = (id) => request.get(`${CLIENT}/products/${id}`)
+
 // 订单 GET /api/v1/orders?status=&page=&page_size=
 export const getOrders = (params) => request.get(`${CLIENT}/orders`, { params })
 

@@ -57,6 +57,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Wallet{},
 		&model.Product{},
 		&model.ProductDenomination{},
+		&model.ProductOrderField{},
 		&model.Channel{},
 		&model.Order{},
 		&model.CommissionRecord{},

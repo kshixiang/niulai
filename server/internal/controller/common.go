@@ -75,7 +75,8 @@ func handleServiceError(c *gin.Context, err error) {
 		errors.Is(err, gorm.ErrRecordNotFound):
 		response.Fail(c, response.CodeNotFound, err.Error())
 	case errors.Is(err, service.ErrChannelUnusable),
-		errors.Is(err, service.ErrInvalidPrice):
+		errors.Is(err, service.ErrInvalidPrice),
+		errors.Is(err, service.ErrInvalidProductField):
 		response.Fail(c, response.CodeInvalidParam, err.Error())
 	default:
 		c.Error(err)

@@ -33,6 +33,20 @@ func (ctl *ClientController) ListProducts(c *gin.Context) {
 	response.Page(c, list, total)
 }
 
+// GetProduct 商品详情 GET /api/v1/products/:id（供 H5 下单页）
+func (ctl *ClientController) GetProduct(c *gin.Context) {
+	id, ok := parseIDParam(c)
+	if !ok {
+		return
+	}
+	v, err := ctl.svc.GetProduct(c.Request.Context(), id)
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
+	response.Success(c, v)
+}
+
 // ListOrders 订单列表 GET /api/v1/orders
 func (ctl *ClientController) ListOrders(c *gin.Context) {
 	var req service.ListClientOrderRequest

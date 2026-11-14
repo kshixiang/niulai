@@ -29,6 +29,7 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	clientSvc := service.NewClientService(db)
 	clientCtl := controller.NewClientController(clientSvc)
 	v1.GET("/products", clientCtl.ListProducts)
+	v1.GET("/products/:id", clientCtl.GetProduct)
 	v1.GET("/orders", clientCtl.ListOrders)
 	v1.GET("/agents", clientCtl.ListAgents)
 

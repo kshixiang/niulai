@@ -118,10 +118,15 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
-      <el-table-column label="成本价" width="110" align="right">
-        <template #default="{ row }">{{ formatPrice(row.cost_price) }}</template>
+      <el-table-column label="渠道折扣" width="100" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.channel_discount != null" type="warning" effect="light" size="small">
+            {{ formatDiscount(row.channel_discount) }}折
+          </el-tag>
+          <span v-else class="muted">—</span>
+        </template>
       </el-table-column>
-      <el-table-column label="折扣" width="90" align="center">
+      <el-table-column label="出售折扣" width="100" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.discount != null" type="danger" effect="light" size="small">
             {{ formatDiscount(row.discount) }}折
@@ -129,18 +134,15 @@ onMounted(() => {
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="价格类别" min-width="180">
+      <el-table-column label="价格类别（渠道价 / 售价 / 盈利）" min-width="260">
         <template #default="{ row }">
           <template v-if="row.denominations && row.denominations.length">
-            <el-tag
-              v-for="d in row.denominations"
-              :key="d.id"
-              size="small"
-              effect="plain"
-              class="denom-tag"
-            >
-              {{ d.name ? `${d.name} ${formatFace(d.face_value)}` : formatFace(d.face_value) }}
-            </el-tag>
+            <div v-for="d in row.denominations" :key="d.id" class="denom-line">
+              <span class="denom-line__name">{{ d.name ? `${d.name} · ` : '' }}面值 {{ formatFace(d.face_value) }}</span>
+              <span>渠道 {{ formatPrice(d.channel_price) }}</span>
+              <span>售 {{ formatPrice(d.sell_price) }}</span>
+              <span class="denom-line__profit">赚 {{ formatPrice(d.profit) }}</span>
+            </div>
           </template>
           <span v-else class="muted">—</span>
         </template>
@@ -220,8 +222,24 @@ onMounted(() => {
 .muted {
   color: #c0c4cc;
 }
-.denom-tag {
-  margin: 2px 4px 2px 0;
+.denom-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+  padding: 2px 0;
+}
+.denom-line + .denom-line {
+  border-top: 1px dashed #ebeef5;
+}
+.denom-line__name {
+  color: var(--el-text-color-secondary);
+}
+.denom-line__profit {
+  color: #e6a23c;
+  font-weight: 700;
 }
 .pagination {
   display: flex;

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"niulai/internal/model"
@@ -13,7 +12,7 @@ import (
 
 // ClientService C 端公开查询服务（/api/v1/*，无需鉴权）。
 //
-// 只投影可对外展示的字段：成本价、利润、上游渠道、用户密码等内部数据
+// 只投影可对外展示的字段：渠道折扣、渠道价、盈利、成本价、上游渠道、用户密码等内部数据
 // 一律不出现在公开视图中，避免通过接口泄露经营数据。
 type ClientService struct {
 	db *gorm.DB
@@ -47,7 +46,7 @@ type ListClientAgentRequest struct {
 
 // ---------- 公开视图 ----------
 
-// ClientDenominationView 价格类别(面值)对外视图，折后价由服务端按折扣实时计算。
+// ClientDenominationView 价格类别(面值)对外视图，售价(final_price)由服务端按出售折扣实时计算。
 type ClientDenominationView struct {
 	ID         uint64      `json:"id"`
 	Name       string      `json:"name"`
@@ -56,8 +55,29 @@ type ClientDenominationView struct {
 	Sort       int         `json:"sort"`
 }
 
-// ClientProductView 商品对外视图
+// ClientOrderFieldView 下单填写项对外视图，不含 id/product_id 等内部字段。
+type ClientOrderFieldView struct {
+	FieldKey    string   `json:"field_key"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`
+	Required    int8     `json:"required"`
+	Placeholder string   `json:"placeholder"`
+	Options     []string `json:"options"`
+	Sort        int      `json:"sort"`
+}
+
+// ClientProductView 商品列表对外视图（首页只展示折扣角标，不返回价格条目）。
 type ClientProductView struct {
+	ID          uint64      `gorm:"column:id"           json:"id"`
+	Name        string      `gorm:"column:name"         json:"name"`
+	Type        string      `gorm:"column:type"         json:"type"`
+	CoverImage  string      `gorm:"column:cover_image"  json:"cover_image"`
+	Discount    model.Money `gorm:"column:discount"     json:"discount"`
+	Description string      `gorm:"column:description"  json:"description"`
+}
+
+// ClientProductDetailView 商品详情对外视图（供 H5 下单页）。
+type ClientProductDetailView struct {
 	ID            uint64                   `gorm:"column:id"           json:"id"`
 	Name          string                   `gorm:"column:name"         json:"name"`
 	Type          string                   `gorm:"column:type"         json:"type"`
@@ -65,6 +85,7 @@ type ClientProductView struct {
 	Discount      model.Money              `gorm:"column:discount"     json:"discount"`
 	Description   string                   `gorm:"column:description"  json:"description"`
 	Denominations []ClientDenominationView `gorm:"-" json:"denominations"`
+	Fields        []ClientOrderFieldView   `gorm:"-" json:"fields"`
 }
 
 // ClientOrderView 订单对外视图
@@ -89,8 +110,7 @@ type ClientAgentView struct {
 
 // ---------- 查询方法 ----------
 
-// ListProducts 分页查询上架商品，支持按类型过滤。
-// Page / PageSize 由 controller 标准化后传入。
+// ListProducts 分页查询上架商品，支持按类型过滤。首页只展示折扣角标，不返回面额与价格。
 func (s *ClientService) ListProducts(ctx context.Context, req *ListClientProductRequest) ([]ClientProductView, int64, error) {
 	base := func() *gorm.DB {
 		q := s.db.WithContext(ctx).Table("products").
@@ -116,61 +136,82 @@ func (s *ClientService) ListProducts(ctx context.Context, req *ListClientProduct
 		Scan(&list).Error; err != nil {
 		return nil, 0, fmt.Errorf("查询在售商品失败: %w", err)
 	}
-	if err := s.fillDenominations(ctx, list); err != nil {
-		return nil, 0, err
-	}
 	return list, total, nil
 }
 
-// fillDenominations 批量加载本页商品的价格类别，按 面值×折扣÷10 计算折后价并回填。
-// 一次 IN 查询避免 N+1；折后价不落库，改折扣后自动更新。
-func (s *ClientService) fillDenominations(ctx context.Context, list []ClientProductView) error {
-	for i := range list {
-		list[i].Denominations = make([]ClientDenominationView, 0)
+// GetProduct 公开商品详情：仅上架、未软删商品，只返回可对外展示的字段。
+// 供 H5 下单页使用；绝不暴露 channel_discount/成本/盈利/渠道等内部数据。
+func (s *ClientService) GetProduct(ctx context.Context, id uint64) (*ClientProductDetailView, error) {
+	var v ClientProductDetailView
+	if err := s.db.WithContext(ctx).Table("products").
+		Select("id, name, type, cover_image, discount, description").
+		Where("id = ? AND status = ? AND deleted_at IS NULL", id, model.ProductStatusOnline).
+		Scan(&v).Error; err != nil {
+		return nil, fmt.Errorf("查询商品详情失败: %w", err)
 	}
-	if len(list) == 0 {
-		return nil
-	}
-
-	ids := make([]uint64, 0, len(list))
-	discountByID := make(map[uint64]model.Money, len(list))
-	for _, p := range list {
-		ids = append(ids, p.ID)
-		discountByID[p.ID] = p.Discount
+	// Scan 不返回 ErrRecordNotFound，查不到时是零值，需显式判断
+	if v.ID == 0 {
+		return nil, ErrProductNotFound
 	}
 
+	denoms, err := s.denominationViews(ctx, id, v.Discount)
+	if err != nil {
+		return nil, err
+	}
+	v.Denominations = denoms
+
+	fields, err := s.fieldViews(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	v.Fields = fields
+	return &v, nil
+}
+
+// denominationViews 查询商品价格类别并计算售价(final_price)：面值 × 出售折扣 ÷ 10。
+func (s *ClientService) denominationViews(ctx context.Context, productID uint64, discount model.Money) ([]ClientDenominationView, error) {
 	var rows []model.ProductDenomination
 	if err := s.db.WithContext(ctx).
-		Where("product_id IN ?", ids).
+		Where("product_id = ?", productID).
 		Order("sort ASC, id ASC").
 		Find(&rows).Error; err != nil {
-		return fmt.Errorf("查询商品价格类别失败: %w", err)
+		return nil, fmt.Errorf("查询商品价格类别失败: %w", err)
 	}
-
-	ten := decimal.NewFromInt(10)
-	indexByID := make(map[uint64]int, len(list))
-	for i := range list {
-		indexByID[list[i].ID] = i
-	}
+	out := make([]ClientDenominationView, 0, len(rows))
 	for _, r := range rows {
-		idx, ok := indexByID[r.ProductID]
-		if !ok {
-			continue
-		}
-		// 折后价 = 面值 × 折扣 ÷ 10，保留两位小数；折扣异常时退化为不打折。
-		discount := discountByID[r.ProductID]
-		if !discount.IsPositive() {
-			discount = ten
-		}
-		list[idx].Denominations = append(list[idx].Denominations, ClientDenominationView{
+		out = append(out, ClientDenominationView{
 			ID:         r.ID,
 			Name:       r.Name,
 			FaceValue:  r.FaceValue,
-			FinalPrice: r.FaceValue.Mul(discount).Div(ten).Round(2),
+			FinalPrice: faceToPrice(r.FaceValue, discount),
 			Sort:       r.Sort,
 		})
 	}
-	return nil
+	return out, nil
+}
+
+// fieldViews 查询商品下单填写项配置，options 解析为数组。
+func (s *ClientService) fieldViews(ctx context.Context, productID uint64) ([]ClientOrderFieldView, error) {
+	var rows []model.ProductOrderField
+	if err := s.db.WithContext(ctx).
+		Where("product_id = ?", productID).
+		Order("sort ASC, id ASC").
+		Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("查询商品下单填写项失败: %w", err)
+	}
+	out := make([]ClientOrderFieldView, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ClientOrderFieldView{
+			FieldKey:    r.FieldKey,
+			Label:       r.Label,
+			Type:        r.Type,
+			Required:    r.Required,
+			Placeholder: r.Placeholder,
+			Options:     parseOptions(r.Options),
+			Sort:        r.Sort,
+		})
+	}
+	return out, nil
 }
 
 // ListOrders 分页查询订单，关联商品名便于展示；支持按状态过滤。

@@ -15,6 +15,8 @@ const routes = [
     ],
   },
   { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { title: '登录' } },
+  // 下单页为独立全屏页（无 tabbar），与 /login 并列
+  { path: '/order/:id', name: 'order', component: () => import('@/views/Order.vue'), meta: { title: '下单' } },
   { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
