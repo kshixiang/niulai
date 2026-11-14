@@ -40,8 +40,27 @@ const loadProducts = async () => {
 }
 onMounted(loadProducts)
 
-const onProduct = (item) =>
-  showToast(item.sale_price ? `${item.name} · ¥${item.sale_price}` : item.name)
+/* 商品定价：折扣(几折) + 多个价格类别；折后价由后端算好(final_price)，前端只做展示 */
+const tiers = (item) =>
+  (Array.isArray(item.denominations) ? item.denominations : [])
+    .map((d) => ({ id: d.id, face: Number(d.face_value), final: Number(d.final_price) }))
+    .filter((t) => Number.isFinite(t.final))
+
+const minFinal = (item) => {
+  const list = tiers(item)
+  if (!list.length) return null
+  return Math.min(...list.map((t) => t.final)).toFixed(2)
+}
+
+const discountText = (item) => {
+  const n = Number(item.discount)
+  return Number.isFinite(n) ? `${n}折` : '优惠'
+}
+
+const onProduct = (item) => {
+  const min = minFinal(item)
+  showToast(min ? `${item.name} · ¥${min} 起 · ${discountText(item)}` : item.name)
+}
 </script>
 
 <template>
@@ -112,8 +131,14 @@ const onProduct = (item) =>
           <div class="card__thumb"><van-icon :name="styleOf(item.type).icon" size="28" /></div>
           <h4 class="card__name">{{ item.name }}</h4>
           <p class="card__desc">{{ item.description || '暂无描述' }}</p>
-          <span class="card__price">¥{{ item.sale_price }}</span>
-          <span class="card__badge">{{ item.discount_label || '优惠' }}</span>
+          <div v-if="tiers(item).length" class="card__tiers">
+            <span v-for="t in tiers(item)" :key="t.id" class="card__tier">¥{{ t.final.toFixed(2) }}</span>
+          </div>
+          <span class="card__price">
+            <template v-if="minFinal(item)">¥{{ minFinal(item) }}<small> 起</small></template>
+            <template v-else>暂无报价</template>
+          </span>
+          <span class="card__badge">{{ discountText(item) }}</span>
         </article>
       </div>
 
@@ -217,7 +242,7 @@ const onProduct = (item) =>
 
 .card {
   position: relative; overflow: hidden;
-  padding: 14px 12px 32px;
+  padding: 14px 12px 40px;
   border: 1px solid var(--border-card); border-radius: var(--radius-card);
   background: var(--bg-card);
   transition: transform .2s ease, border-color .2s ease;
@@ -247,11 +272,20 @@ const onProduct = (item) =>
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* 右下角售价 */
+/* 各价格类别折后价（多个不同价格） */
+.card__tiers { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.card__tier {
+  padding: 2px 6px; border-radius: 6px;
+  background: var(--c-fill); color: var(--text-secondary);
+  font-size: 10px; font-weight: 700; white-space: nowrap;
+}
+
+/* 右下角售价（最低折后价） */
 .card__price {
   position: absolute; right: 10px; bottom: 6px;
   font-size: 13px; font-weight: 800; color: var(--c-accent);
 }
+.card__price small { font-size: 10px; font-weight: 600; }
 
 /* 左下角黄色折扣角标 */
 .card__badge {

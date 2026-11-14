@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"niulai/internal/model"
@@ -46,15 +47,24 @@ type ListClientAgentRequest struct {
 
 // ---------- 公开视图 ----------
 
+// ClientDenominationView 价格类别(面值)对外视图，折后价由服务端按折扣实时计算。
+type ClientDenominationView struct {
+	ID         uint64      `json:"id"`
+	Name       string      `json:"name"`
+	FaceValue  model.Money `json:"face_value"`
+	FinalPrice model.Money `json:"final_price"`
+	Sort       int         `json:"sort"`
+}
+
 // ClientProductView 商品对外视图
 type ClientProductView struct {
-	ID            uint64      `gorm:"column:id"             json:"id"`
-	Name          string      `gorm:"column:name"           json:"name"`
-	Type          string      `gorm:"column:type"           json:"type"`
-	CoverImage    string      `gorm:"column:cover_image"    json:"cover_image"`
-	SalePrice     model.Money `gorm:"column:sale_price"     json:"sale_price"`
-	DiscountLabel string      `gorm:"column:discount_label" json:"discount_label"`
-	Description   string      `gorm:"column:description"    json:"description"`
+	ID            uint64                   `gorm:"column:id"           json:"id"`
+	Name          string                   `gorm:"column:name"         json:"name"`
+	Type          string                   `gorm:"column:type"         json:"type"`
+	CoverImage    string                   `gorm:"column:cover_image"  json:"cover_image"`
+	Discount      model.Money              `gorm:"column:discount"     json:"discount"`
+	Description   string                   `gorm:"column:description"  json:"description"`
+	Denominations []ClientDenominationView `gorm:"-" json:"denominations"`
 }
 
 // ClientOrderView 订单对外视图
@@ -99,14 +109,68 @@ func (s *ClientService) ListProducts(ctx context.Context, req *ListClientProduct
 
 	list := make([]ClientProductView, 0)
 	if err := base().
-		Select("id, name, type, cover_image, sale_price, discount_label, description").
+		Select("id, name, type, cover_image, discount, description").
 		Order("id DESC").
 		Offset((req.Page - 1) * req.PageSize).
 		Limit(req.PageSize).
 		Scan(&list).Error; err != nil {
 		return nil, 0, fmt.Errorf("查询在售商品失败: %w", err)
 	}
+	if err := s.fillDenominations(ctx, list); err != nil {
+		return nil, 0, err
+	}
 	return list, total, nil
+}
+
+// fillDenominations 批量加载本页商品的价格类别，按 面值×折扣÷10 计算折后价并回填。
+// 一次 IN 查询避免 N+1；折后价不落库，改折扣后自动更新。
+func (s *ClientService) fillDenominations(ctx context.Context, list []ClientProductView) error {
+	for i := range list {
+		list[i].Denominations = make([]ClientDenominationView, 0)
+	}
+	if len(list) == 0 {
+		return nil
+	}
+
+	ids := make([]uint64, 0, len(list))
+	discountByID := make(map[uint64]model.Money, len(list))
+	for _, p := range list {
+		ids = append(ids, p.ID)
+		discountByID[p.ID] = p.Discount
+	}
+
+	var rows []model.ProductDenomination
+	if err := s.db.WithContext(ctx).
+		Where("product_id IN ?", ids).
+		Order("sort ASC, id ASC").
+		Find(&rows).Error; err != nil {
+		return fmt.Errorf("查询商品价格类别失败: %w", err)
+	}
+
+	ten := decimal.NewFromInt(10)
+	indexByID := make(map[uint64]int, len(list))
+	for i := range list {
+		indexByID[list[i].ID] = i
+	}
+	for _, r := range rows {
+		idx, ok := indexByID[r.ProductID]
+		if !ok {
+			continue
+		}
+		// 折后价 = 面值 × 折扣 ÷ 10，保留两位小数；折扣异常时退化为不打折。
+		discount := discountByID[r.ProductID]
+		if !discount.IsPositive() {
+			discount = ten
+		}
+		list[idx].Denominations = append(list[idx].Denominations, ClientDenominationView{
+			ID:         r.ID,
+			Name:       r.Name,
+			FaceValue:  r.FaceValue,
+			FinalPrice: r.FaceValue.Mul(discount).Div(ten).Round(2),
+			Sort:       r.Sort,
+		})
+	}
+	return nil
 }
 
 // ListOrders 分页查询订单，关联商品名便于展示；支持按状态过滤。

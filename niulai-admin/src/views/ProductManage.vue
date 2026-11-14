@@ -70,6 +70,11 @@ async function handleStatusChange(row) {
 }
 
 const formatPrice = (v) => (Number.isFinite(Number(v)) ? `¥${Number(v).toFixed(2)}` : '—')
+const formatDiscount = (v) => (v == null || v === '' ? '—' : String(Number(v)))
+const formatFace = (v) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? String(n) : '—'
+}
 
 onMounted(() => {
   loadChannels()
@@ -116,14 +121,27 @@ onMounted(() => {
       <el-table-column label="成本价" width="110" align="right">
         <template #default="{ row }">{{ formatPrice(row.cost_price) }}</template>
       </el-table-column>
-      <el-table-column label="销售价" width="110" align="right">
-        <template #default="{ row }">{{ formatPrice(row.sale_price) }}</template>
-      </el-table-column>
-      <el-table-column label="折扣标签" width="110" align="center">
+      <el-table-column label="折扣" width="90" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.discount_label" type="danger" effect="light" size="small">
-            {{ row.discount_label }}
+          <el-tag v-if="row.discount != null" type="danger" effect="light" size="small">
+            {{ formatDiscount(row.discount) }}折
           </el-tag>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="价格类别" min-width="180">
+        <template #default="{ row }">
+          <template v-if="row.denominations && row.denominations.length">
+            <el-tag
+              v-for="d in row.denominations"
+              :key="d.id"
+              size="small"
+              effect="plain"
+              class="denom-tag"
+            >
+              {{ d.name ? `${d.name} ${formatFace(d.face_value)}` : formatFace(d.face_value) }}
+            </el-tag>
+          </template>
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
@@ -201,6 +219,9 @@ onMounted(() => {
 }
 .muted {
   color: #c0c4cc;
+}
+.denom-tag {
+  margin: 2px 4px 2px 0;
 }
 .pagination {
   display: flex;

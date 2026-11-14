@@ -21,9 +21,12 @@ type Product struct {
 	SalePrice     Money  `gorm:"column:sale_price;type:decimal(10,2);not null;default:0;comment:销售价" json:"sale_price"`
 	CostPrice     Money  `gorm:"column:cost_price;type:decimal(10,2);not null;default:0;comment:成本价" json:"cost_price"`
 	DiscountLabel string `gorm:"column:discount_label;type:varchar(32);not null;default:'';comment:折扣标签 如7.8折" json:"discount_label"`
+	Discount      Money  `gorm:"column:discount;type:decimal(4,2);not null;default:10.00;comment:折扣(几折) 如6表示6折 折后价=面值×折扣÷10" json:"discount"`
 	Description   string `gorm:"column:description;type:varchar(512);not null;default:'';comment:提示语/描述" json:"description"`
 	ChannelID     uint64 `gorm:"column:channel_id;type:bigint;not null;default:0;comment:绑定的上游渠道ID" json:"channel_id"`
 	Status        int8   `gorm:"column:status;type:tinyint;not null;default:0;index:idx_type_status,priority:2;comment:上下架状态 1上架 0下架" json:"status"`
+	// Denominations 价格类别(面值)，通过 Preload 载入，供后台列表与编辑表单使用。
+	Denominations []ProductDenomination `gorm:"foreignKey:ProductID" json:"denominations"`
 }
 
 func (Product) TableName() string { return "products" }

@@ -24,14 +24,18 @@ const TYPE_OPTIONS = ['话费', '卡券']
 const COVER_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const MAX_COVER_SIZE = 2 * 1024 * 1024
 
+// 价格类别行用稳定 key，删除中间行时不会串值
+let denomUid = 0
+const newDenomination = () => ({ _uid: ++denomUid, name: '', face_value: null })
+
 const emptyForm = () => ({
   name: '',
   type: '',
   cover_image: '',
   cost_price: null,
-  sale_price: null,
+  discount: 10, // 几折，10=不打折
+  denominations: [newDenomination()],
   channel_id: null,
-  discount_label: '',
   description: '',
   status: 0, // 仅新增时提交：1=立即上架 0=暂不上架
 })
@@ -50,13 +54,21 @@ const checkPrice = (label) => (rule, value, callback) => {
   callback()
 }
 
-const validateSalePrice = (rule, value, callback) => {
-  if (value === null || value === undefined || value === '') return callback(new Error('请输入销售价'))
-  if (!isNumber(value)) return callback(new Error('销售价必须是数字'))
-  if (value < 0) return callback(new Error('销售价不能为负'))
-  if (isNumber(form.cost_price) && value < form.cost_price) return callback(new Error('销售价不能低于成本价'))
+const checkDiscount = (rule, value, callback) => {
+  if (value === null || value === undefined || value === '') return callback(new Error('请输入折扣'))
+  if (!isNumber(value)) return callback(new Error('折扣必须是数字'))
+  if (value <= 0 || value > 10) return callback(new Error('折扣必须在 0~10 之间（如 6 表示 6 折）'))
   callback()
 }
+
+const checkFaceValue = (rule, value, callback) => {
+  if (value === null || value === undefined || value === '') return callback(new Error('请输入面值'))
+  if (!isNumber(value)) return callback(new Error('面值必须是数字'))
+  if (value <= 0) return callback(new Error('面值必须大于 0'))
+  callback()
+}
+
+const faceValueRules = [{ validator: checkFaceValue, trigger: ['blur', 'change'] }]
 
 const rules = {
   name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }],
@@ -64,7 +76,27 @@ const rules = {
   cover_image: [{ required: true, message: '请上传封面图片', trigger: 'change' }],
   channel_id: [{ required: true, message: '请选择绑定渠道', trigger: 'change' }],
   cost_price: [{ validator: checkPrice('成本价'), trigger: ['blur', 'change'] }],
-  sale_price: [{ validator: validateSalePrice, trigger: ['blur', 'change'] }],
+  discount: [{ validator: checkDiscount, trigger: ['blur', 'change'] }],
+}
+
+// 折后价预览：面值 × 折扣 ÷ 10，仅用于展示，计算以后端为准
+const previewPrice = (d) => {
+  const fv = Number(d.face_value)
+  const disc = Number(form.discount)
+  if (!isNumber(fv) || fv <= 0 || !isNumber(disc) || disc <= 0) return '—'
+  return (fv * disc / 10).toFixed(2)
+}
+const examplePrice = computed(() => {
+  const disc = Number(form.discount)
+  if (!isNumber(disc) || disc <= 0) return '—'
+  return (200 * disc / 10).toFixed(2)
+})
+
+function addDenomination() {
+  form.denominations.push(newDenomination())
+}
+function removeDenomination(index) {
+  form.denominations.splice(index, 1)
 }
 
 function pick(p) {
@@ -75,9 +107,18 @@ function pick(p) {
     type: p.type ?? '',
     cover_image: p.cover_image ?? '',
     cost_price: p.cost_price == null ? null : Number(p.cost_price),
-    sale_price: p.sale_price == null ? null : Number(p.sale_price),
+    discount: p.discount == null ? 10 : Number(p.discount),
+    denominations:
+      Array.isArray(p.denominations) && p.denominations.length
+        ? [...p.denominations]
+            .sort((a, b) => Number(a.sort) - Number(b.sort))
+            .map((d) => ({
+              _uid: ++denomUid,
+              name: d.name ?? '',
+              face_value: d.face_value == null ? null : Number(d.face_value),
+            }))
+        : [newDenomination()],
     channel_id: p.channel_id == null ? null : Number(p.channel_id),
-    discount_label: p.discount_label ?? '',
     description: p.description ?? '',
   }
 }
@@ -88,16 +129,6 @@ watch(
     if (!open) return
     Object.assign(form, emptyForm(), pick(props.product))
     nextTick(() => formRef.value?.clearValidate())
-  },
-)
-
-// 成本价变动时联动重校销售价，保证「不低于成本价」实时生效
-watch(
-  () => form.cost_price,
-  () => {
-    if (isNumber(form.sale_price) && formRef.value) {
-      formRef.value.validateField('sale_price').catch(() => {})
-    }
   },
 )
 
@@ -133,19 +164,35 @@ function removeCover() {
 async function submit() {
   const ok = await formRef.value.validate().catch(() => false)
   if (!ok) return
+  if (!form.denominations.length) {
+    ElMessage.warning('请至少添加一个价格类别')
+    return
+  }
+  if (form.denominations.some((d) => !(Number(d.face_value) > 0))) {
+    ElMessage.warning('价格类别的面值必须大于 0')
+    return
+  }
   if (uploading.value) {
     ElMessage.warning('封面还在上传中，请稍候')
     return
   }
   submitting.value = true
   try {
-    // 后端金额字段是 string（decimal 用字符串解析），不能传 number
+    // 后端金额 / 折扣 / 面值字段是 string（decimal 用字符串解析），不能传 number
     const payload = {
-      ...form,
+      name: form.name,
+      type: form.type,
+      cover_image: form.cover_image,
       cost_price: String(form.cost_price),
-      sale_price: String(form.sale_price),
+      discount: String(form.discount),
+      denominations: form.denominations.map((d) => ({
+        name: d.name || '',
+        face_value: String(d.face_value),
+      })),
+      channel_id: form.channel_id,
+      description: form.description,
     }
-    if (isEdit.value) delete payload.status
+    if (!isEdit.value) payload.status = form.status
     if (isEdit.value) await updateProduct(props.product.id, payload)
     else await createProduct(payload)
     ElMessage.success(isEdit.value ? '编辑成功' : '新增成功')
@@ -161,7 +208,7 @@ async function submit() {
   <el-dialog
     v-model="visible"
     :title="title"
-    width="620px"
+    width="660px"
     :close-on-click-modal="false"
     destroy-on-close
     class="product-dialog"
@@ -224,19 +271,60 @@ async function submit() {
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="销售价" prop="sale_price">
+          <el-form-item label="折扣" prop="discount">
             <el-input-number
-              v-model="form.sale_price"
+              v-model="form.discount"
               :min="0"
+              :max="10"
               :precision="2"
-              :step="0.01"
+              :step="0.1"
               :controls="false"
-              placeholder="0.00"
+              placeholder="如 6"
               style="width: 100%"
             />
           </el-form-item>
         </el-col>
       </el-row>
+
+      <el-form-item label="价格类别">
+        <div class="denom-field">
+          <div class="denom-hint">
+            折后价 = 面值 × 折扣 ÷ 10；当前折扣 <b>{{ form.discount }} 折</b>，
+            例：面值 200 → <b>¥{{ examplePrice }}</b>。可添加多个价格类别，共用同一折扣。
+          </div>
+
+          <div v-for="(d, index) in form.denominations" :key="d._uid" class="denom-row">
+            <span class="denom-index">{{ index + 1 }}</span>
+            <el-input v-model="d.name" class="denom-name" placeholder="类别名称（选填）" maxlength="64" clearable />
+            <el-form-item
+              class="denom-subitem denom-face"
+              label-width="0px"
+              :prop="`denominations.${index}.face_value`"
+              :rules="faceValueRules"
+            >
+              <el-input-number
+                v-model="d.face_value"
+                :min="0"
+                :precision="2"
+                :step="1"
+                :controls="false"
+                placeholder="面值"
+                style="width: 100%"
+              />
+            </el-form-item>
+            <span class="denom-final">折后 ¥{{ previewPrice(d) }}</span>
+            <el-button
+              link
+              type="danger"
+              :icon="Delete"
+              :disabled="form.denominations.length <= 1"
+              @click="removeDenomination(index)"
+            />
+          </div>
+
+          <el-button :icon="Plus" size="small" @click="addDenomination">添加价格类别</el-button>
+        </div>
+      </el-form-item>
 
       <el-form-item label="绑定渠道" prop="channel_id">
         <el-select v-model="form.channel_id" placeholder="请选择渠道" filterable style="width: 100%">
@@ -255,10 +343,6 @@ async function submit() {
           />
           <span class="status-hint">上架需绑定可用的上游渠道</span>
         </div>
-      </el-form-item>
-
-      <el-form-item label="折扣标签" prop="discount_label">
-        <el-input v-model="form.discount_label" placeholder="如：7.8折（留空则不展示）" clearable />
       </el-form-item>
 
       <el-form-item label="描述提示语" prop="description">
@@ -323,5 +407,47 @@ async function submit() {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.denom-field {
+  width: 100%;
+}
+.denom-hint {
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.denom-hint b {
+  color: #409eff;
+}
+.denom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.denom-index {
+  flex: 0 0 18px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 12px;
+}
+.denom-name {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.denom-face {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.denom-subitem {
+  margin-bottom: 0 !important;
+}
+.denom-final {
+  flex: 0 0 100px;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #e6a23c;
 }
 </style>
