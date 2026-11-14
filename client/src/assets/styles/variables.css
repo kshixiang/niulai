@@ -1,0 +1,74 @@
+/* ============================================================
+   三层令牌：
+   第 1 层 原子色/渐变  →  第 2 层 语义变量  →  第 3 层 Vant 4 的 --van-*
+   组件里一律只写 var(--xxx)，不写死颜色
+   ============================================================ */
+:root {
+  color-scheme: dark; /* 原生滚动条、input、系统控件同步变深 */
+
+  /* ---- 1. 原子色 ---- */
+  --c-bg:         #12121a;  /* 页面深色背景 */
+  --c-bg-deep:    #0d0d14;  /* 底部导航 / 状态栏 */
+  --c-surface:    #1b1b27;  /* 卡片一级 */
+  --c-surface-2:  #232333;
+  --c-line:       rgba(255, 255, 255, .08);
+  --c-fill:       rgba(255, 255, 255, .05);
+
+  --c-brand:      #7b5cff;  /* 主色 紫 */
+  --c-brand-2:    #4c8dff;  /* 主色 蓝 */
+  --c-accent:     #ffcf3f;  /* 折扣角标 黄 */
+  --c-accent-ink: #3a2a00;
+  --c-danger:     #ff5c6c;
+  --c-success:    #35d0a0;
+
+  --c-text:       #ffffff;
+  --c-text-2:     #a7a7bd;  /* 次要灰 */
+  --c-text-3:     #6f6f88;  /* 弱化灰 / 未选中 */
+
+  /* ---- 2. 语义变量 ---- */
+  --gradient-brand:  linear-gradient(135deg, #8a5cff 0%, #5b6cff 48%, #3aa0ff 100%);
+  --gradient-banner: linear-gradient(120deg, #7b4dff 0%, #5a5cff 52%, #3f8cff 100%);
+  --gradient-gold:   linear-gradient(135deg, #ffd95e 0%, #ffb52e 100%);
+
+  --bg-page:        var(--c-bg);
+  --bg-card:        var(--c-surface);
+  --bg-tabbar:      var(--c-bg-deep);
+  --text-primary:   var(--c-text);
+  --text-secondary: var(--c-text-2);
+  --text-muted:     var(--c-text-3);
+  --color-primary:  var(--c-brand);
+  --color-accent:   var(--c-accent);
+  --border-card:    var(--c-line);
+
+  --radius-card:   16px;
+  --radius-pill:   999px;
+  --page-padding:  16px;
+  --tabbar-height: 56px;
+  --safe-bottom:   env(safe-area-inset-bottom, 0px);
+  --safe-top:      env(safe-area-inset-top, 0px);
+
+  /* ---- 3. 映射 Vant 4 变量：一处定义，组件库整体换肤 ---- */
+  --van-primary-color:                  var(--c-brand);
+  --van-text-color:                     var(--c-text);
+  --van-text-color-2:                   var(--c-text-2);
+  --van-background:                     var(--c-bg);
+  --van-background-2:                   var(--c-surface);
+  --van-border-color:                   var(--c-line);
+  --van-cell-background:                var(--c-surface);
+  --van-tabbar-background:              var(--c-bg-deep);
+  --van-tabbar-height:                  var(--tabbar-height);
+  --van-tabbar-item-text-color:         var(--c-text-3);   /* 未选中灰 */
+  --van-tabbar-item-active-color:       var(--c-brand);    /* 选中高亮紫 */
+  --van-tabbar-item-active-background:  transparent;
+  --van-tabs-nav-background:            transparent;
+  --van-toast-background:               rgba(0, 0, 0, .82);
+  --van-toast-text-color:               var(--c-text);
+}
+
+/* 换肤示例：只覆盖少量原子色，页面 + Vant 组件一起变亮 */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --c-bg: #f5f6fa; --c-bg-deep: #fff;   --c-surface: #fff; --c-surface-2: #eef0f6;
+  --c-line: rgba(0,0,0,.08); --c-fill: rgba(0,0,0,.04);
+  --c-text: #1a1a24; --c-text-2: #6b6b80; --c-text-3: #9b9bb0;
+}

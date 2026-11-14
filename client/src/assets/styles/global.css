@@ -1,0 +1,43 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: #08080e;                 /* 桌面预览时容器外的底色 */
+  color: var(--text-primary);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* H5 在桌面调试时按手机宽度居中 */
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--bg-page);
+  position: relative;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4, p, ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+img { display: block; max-width: 100%; }
+button { font-family: inherit; cursor: pointer; }
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* 页面滚动容器 + 给固定 Tabbar / 安全区留白 */
+.page--scroll {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: calc(var(--page-padding) + var(--safe-top)) var(--page-padding);
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 28px);
+}
+
+.text-gradient {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

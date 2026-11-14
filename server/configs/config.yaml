@@ -1,0 +1,33 @@
+# 服务配置
+server:
+  port: 8080
+  mode: release        # debug / release
+
+# MySQL 配置
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  username: root
+  password: "123456"
+  database: niulai
+  charset: utf8mb4
+  max_idle_conns: 10    # 最大空闲连接数
+  max_open_conns: 100   # 最大打开连接数
+  conn_max_lifetime: 60 # 连接最大存活时间(分钟)
+
+# Redis 配置
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: ""
+  db: 0
+
+# JWT 配置
+jwt:
+  secret: "please-change-this-secret-to-a-long-random-string"
+  expire: 24           # 有效期(小时)
+
+# 日志配置
+log:
+  level: info
+  path: ./logs
