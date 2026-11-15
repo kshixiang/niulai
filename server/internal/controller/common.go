@@ -67,6 +67,8 @@ func handleServiceError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrInviterNotFound),
 		errors.Is(err, service.ErrInvalidNickname):
 		response.Fail(c, response.CodeInvalidParam, err.Error())
+	case errors.Is(err, service.ErrInsufficientBalance):
+		response.Fail(c, response.CodeInsufficientBalance, err.Error())
 	case errors.Is(err, service.ErrUserDisabled):
 		response.Fail(c, response.CodeForbidden, err.Error())
 	case errors.Is(err, service.ErrUserNotFound),

@@ -2,7 +2,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getProductDetail, createOrder } from '@/api'
+import { getProductDetail, createOrder, getWallet } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +15,7 @@ const selectedId = ref(null) // 选中的价格类别 id
 const customAmount = ref('') // 自定义面值
 const customFieldRef = ref(null)
 const showDesc = ref(false)
+const showInsufficient = ref(false) // 余额不足弹窗
 
 const fields = computed(() => product.value?.fields || [])
 const denominations = computed(() => product.value?.denominations || [])
@@ -78,6 +79,11 @@ function goBack() {
   if (window.history.state?.back) router.back()
   else router.replace('/home')
 }
+// 立即充值：跳到「我的」，顶部余额卡片即充值入口
+function goRecharge() {
+  showInsufficient.value = false
+  router.push('/mine')
+}
 
 onMounted(async () => {
   try {
@@ -127,6 +133,12 @@ async function submit() {
   if (submitting.value || !validate()) return
   submitting.value = true
   try {
+    // 余额预检：读取当前可用余额，与应付金额比较（价格均按 USDT 结算，直接比较）
+    const wallet = await getWallet()
+    if (Number(wallet.balance) < (sellPrice.value || 0)) {
+      showInsufficient.value = true
+      return
+    }
     const payload = {
       product_id: Number(route.params.id),
       fields: { ...form },
@@ -235,16 +247,16 @@ async function submit() {
         <!-- 汇总面板 -->
         <section class="order__card summary">
           <div class="summary__row">
-            <span>订单金额</span><span>¥{{ amount ? fmt(amount) : '-' }}</span>
+            <span>订单金额</span><span>{{ amount ? fmt(amount) : '-' }} USDT</span>
           </div>
           <div class="summary__row">
             <span>折扣</span><span>{{ discountText }}</span>
           </div>
           <div class="summary__row">
-            <span>优惠金额</span><span>¥{{ fmt(discountAmount) }}</span>
+            <span>优惠金额</span><span>{{ fmt(discountAmount) }} USDT</span>
           </div>
           <div class="summary__row summary__row--total">
-            <span>应付金额</span><span class="summary__pay">¥{{ fmt(sellPrice) }}</span>
+            <span>应付金额</span><span class="summary__pay">{{ fmt(sellPrice) }} USDT</span>
           </div>
         </section>
       </template>
@@ -262,6 +274,22 @@ async function submit() {
         @click="submit"
       >下单</van-button>
     </div>
+
+    <!-- 余额不足提示：挂到 body，避免被滚动容器裁剪 -->
+    <Teleport to="body">
+      <div v-if="showInsufficient" class="mask" @click.self="showInsufficient = false">
+        <div class="dialog">
+          <button type="button" class="dialog__close" aria-label="关闭" @click="showInsufficient = false">
+            <van-icon name="cross" />
+          </button>
+          <p class="dialog__msg">余额不足，请先充值</p>
+          <div class="dialog__actions">
+            <button type="button" class="dialog__btn dialog__btn--outline" @click="showInsufficient = false">取消</button>
+            <button type="button" class="dialog__btn dialog__btn--primary" @click="goRecharge">立即充值</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -359,4 +387,33 @@ async function submit() {
 }
 .order__submit { background: var(--gradient-brand); border: none; color: #fff; font-weight: 700; }
 .order__submit :deep(.van-button__text) { color: #fff; }
+
+/* ---------- 余额不足弹层 ---------- */
+.mask {
+  position: fixed; inset: 0; z-index: 2000;
+  display: grid; place-items: center; padding: 24px;
+  background: rgba(0, 0, 0, .6);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.dialog {
+  position: relative;
+  width: 100%; max-width: 320px; padding: 26px 20px 20px;
+  border: 1px solid var(--border-card); border-radius: 18px;
+  background: var(--c-surface-2);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+}
+.dialog__close {
+  position: absolute; top: 10px; right: 10px;
+  width: 26px; height: 26px; display: grid; place-items: center;
+  border: none; background: none; color: var(--text-secondary); font-size: 18px;
+}
+.dialog__msg { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); text-align: center; }
+.dialog__actions { display: flex; gap: 12px; margin-top: 24px; }
+.dialog__btn {
+  flex: 1; height: 42px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border-card); background: var(--bg-card);
+  color: var(--text-secondary); font-size: 14px; font-weight: 700;
+}
+.dialog__btn--outline { background: transparent; border-color: var(--c-brand); color: var(--c-brand); }
+.dialog__btn--primary { background: var(--gradient-brand); border: none; color: #fff; }
 </style>

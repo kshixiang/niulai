@@ -188,9 +188,9 @@ onMounted(async () => {
           </div>
 
           <div class="card__amounts">
-            <div class="amt"><span>订单金额</span><b>¥{{ fmtMoney(item.amount) }}</b></div>
-            <div class="amt"><span>到账金额</span><b>¥{{ fmtMoney(item.received_amount) }}</b></div>
-            <div class="amt"><span>剩余金额</span><b>¥{{ fmtMoney(item.remaining_amount) }}</b></div>
+            <div class="amt"><span>订单金额</span><b>{{ fmtMoney(item.amount) }} USDT</b></div>
+            <div class="amt"><span>到账金额</span><b>{{ fmtMoney(item.received_amount) }} USDT</b></div>
+            <div class="amt"><span>剩余金额</span><b>{{ fmtMoney(item.remaining_amount) }} USDT</b></div>
           </div>
 
           <div class="card__time">下单时间：{{ fmtTime(item.created_at) }}</div>

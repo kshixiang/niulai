@@ -22,6 +22,8 @@ var (
 	ErrProductOffline = errors.New("商品已下架")
 	// ErrInvalidOrderParam 下单参数不合法（金额、填写项等）
 	ErrInvalidOrderParam = errors.New("下单参数不合法")
+	// ErrInsufficientBalance 下单时可用余额不足以支付应付金额
+	ErrInsufficientBalance = errors.New("余额不足，请先充值")
 )
 
 // 话费下单手机号字段标识与格式规则：中国大陆 11 位号码。
@@ -90,6 +92,18 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req *CreateOrd
 	formData, account, err := s.buildFormData(ctx, req.ProductID, p.Type, req.Fields, req.Account)
 	if err != nil {
 		return nil, err
+	}
+
+	// 余额校验：价格均按 USDT 结算，可用余额须覆盖本单应付金额；未开通账户视为零余额
+	var w model.Wallet
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&w).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInsufficientBalance
+		}
+		return nil, fmt.Errorf("查询资金账户失败: %w", err)
+	}
+	if w.Balance.LessThan(amount) {
+		return nil, ErrInsufficientBalance
 	}
 
 	order := &model.Order{

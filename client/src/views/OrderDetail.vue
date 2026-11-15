@@ -109,15 +109,15 @@ onMounted(async () => {
         <section class="block">
           <div class="row">
             <span class="row__label">订单金额</span>
-            <span class="row__value row__value--strong">¥{{ fmtMoney(order.amount) }}</span>
+            <span class="row__value row__value--strong">{{ fmtMoney(order.amount) }} USDT</span>
           </div>
           <div class="row">
             <span class="row__label">到账金额</span>
-            <span class="row__value row__value--strong">¥{{ fmtMoney(order.received_amount) }}</span>
+            <span class="row__value row__value--strong">{{ fmtMoney(order.received_amount) }} USDT</span>
           </div>
           <div class="row">
             <span class="row__label">剩余金额</span>
-            <span class="row__value row__value--strong">¥{{ fmtMoney(order.remaining_amount) }}</span>
+            <span class="row__value row__value--strong">{{ fmtMoney(order.remaining_amount) }} USDT</span>
           </div>
         </section>
       </div>

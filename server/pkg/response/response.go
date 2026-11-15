@@ -23,6 +23,8 @@ const (
 	CodeUnauthorized = 401
 	CodeForbidden    = 403
 	CodeNotFound     = 404
+	// CodeInsufficientBalance 下单时可用余额不足以支付应付金额
+	CodeInsufficientBalance = 402
 )
 
 // Success 成功并返回数据
