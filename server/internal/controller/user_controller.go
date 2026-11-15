@@ -56,6 +56,20 @@ func (ctl *UserController) Profile(c *gin.Context) {
 	response.Success(c, view)
 }
 
+// UpdateProfile 修改当前用户昵称 PUT /api/v1/auth/profile
+func (ctl *UserController) UpdateProfile(c *gin.Context) {
+	var req service.UserProfileUpdateRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	view, err := ctl.svc.UpdateProfile(c.Request.Context(), c.GetUint64("user_id"), &req)
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
+	response.Success(c, view)
+}
+
 // respondWithToken 注册/登录成功后签发令牌，实现注册即登录。
 func (ctl *UserController) respondWithToken(c *gin.Context, view *service.UserView) {
 	cfg := config.GlobalConfig

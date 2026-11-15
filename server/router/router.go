@@ -47,6 +47,12 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	auth.POST("/register", userCtl.Register)
 	auth.POST("/login", userCtl.Login)
 	auth.GET("/profile", middleware.UserRequired(), userCtl.Profile)
+	auth.PUT("/profile", middleware.UserRequired(), userCtl.UpdateProfile)
+
+	// C 端资金账户：需用户登录，只返回当前用户自己的余额
+	walletSvc := service.NewWalletService(db)
+	walletCtl := controller.NewWalletController(walletSvc)
+	v1.GET("/wallet", middleware.UserRequired(), walletCtl.Get)
 
 	// 登录接口独立成免鉴权组，必须在 AdminRequired 之前注册
 	public := v1.Group("/admin")

@@ -36,3 +36,9 @@ export const login = (data) => request.post(`${CLIENT}/auth/login`, data)
 
 // 当前用户资料 GET /api/v1/auth/profile（需 Bearer token）
 export const getProfile = () => request.get(`${CLIENT}/auth/profile`)
+
+// 修改当前用户昵称 PUT /api/v1/auth/profile（需 Bearer token）→ 最新用户资料
+export const updateProfile = (data) => request.put(`${CLIENT}/auth/profile`, data)
+
+// 当前用户资金账户 GET /api/v1/wallet（需 Bearer token）→ { balance, frozen_balance }
+export const getWallet = () => request.get(`${CLIENT}/wallet`)

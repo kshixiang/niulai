@@ -22,6 +22,7 @@ var (
 	ErrUserNotFound         = errors.New("用户不存在")
 	ErrRegisterCodeRequired = errors.New("请填写注册码")
 	ErrRegisterCodeInvalid  = errors.New("注册码无效或已禁用")
+	ErrInvalidNickname      = errors.New("昵称不能为空")
 )
 
 // bcrypt 对密码有 72 字节上限；validator 的 max 按字符数计算，
@@ -43,6 +44,11 @@ type UserRegisterRequest struct {
 type UserLoginRequest struct {
 	Phone    string `json:"phone"    binding:"required,min=3,max=20"`
 	Password string `json:"password" binding:"required,max=72"`
+}
+
+// UserProfileUpdateRequest 修改当前用户资料（目前仅支持昵称）。
+type UserProfileUpdateRequest struct {
+	Nickname string `json:"nickname" binding:"required,min=1,max=64"`
 }
 
 // ---------- 对外视图 ----------
@@ -172,5 +178,25 @@ func (s *UserService) GetProfile(ctx context.Context, userID uint64) (*UserView,
 		}
 		return nil, fmt.Errorf("查询用户失败: %w", err)
 	}
+	return toUserView(&u), nil
+}
+
+// UpdateProfile 更新当前用户昵称并返回最新资料。
+func (s *UserService) UpdateProfile(ctx context.Context, userID uint64, req *UserProfileUpdateRequest) (*UserView, error) {
+	nickname := strings.TrimSpace(req.Nickname)
+	if nickname == "" {
+		return nil, ErrInvalidNickname
+	}
+	var u model.User
+	if err := s.db.WithContext(ctx).First(&u, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("查询用户失败: %w", err)
+	}
+	if err := s.db.WithContext(ctx).Model(&u).Update("nickname", nickname).Error; err != nil {
+		return nil, fmt.Errorf("更新用户资料失败: %w", err)
+	}
+	u.Nickname = nickname
 	return toUserView(&u), nil
 }
