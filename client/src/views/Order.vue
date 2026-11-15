@@ -95,14 +95,22 @@ onMounted(async () => {
   }
 })
 
+// 与服务端 phonePattern 保持一致：中国大陆 11 位手机号
+const PHONE_PATTERN = /^1[3-9]\d{9}$/
+
 function validate() {
   if (!amount.value || amount.value <= 0) {
     showToast('请选择或输入订单金额')
     return false
   }
   for (const f of fields.value) {
-    if (f.required && !String(form[f.field_key] ?? '').trim()) {
+    const v = String(form[f.field_key] ?? '').trim()
+    if (f.required && !v) {
       showToast(`请填写${f.label}`)
+      return false
+    }
+    if (f.field_key === 'phone' && v && !PHONE_PATTERN.test(v)) {
+      showToast('请输入正确的11位手机号')
       return false
     }
   }
@@ -184,7 +192,9 @@ async function submit() {
                   v-else
                   v-model="form[f.field_key]"
                   class="field-input"
-                  :type="f.type === 'number' ? 'number' : 'text'"
+                  :type="f.field_key === 'phone' ? 'tel' : (f.type === 'number' ? 'number' : 'text')"
+                  :maxlength="f.field_key === 'phone' ? 11 : undefined"
+                  :inputmode="f.field_key === 'phone' ? 'numeric' : undefined"
                   :placeholder="f.placeholder"
                 />
               </template>

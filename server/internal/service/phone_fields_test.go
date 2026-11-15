@@ -84,3 +84,22 @@ func TestAppendPhoneFields(t *testing.T) {
 		}
 	})
 }
+
+func TestPhonePattern(t *testing.T) {
+	valid := []string{"13800138000", "19912345678", "18612345678", "15012345678"}
+	invalid := []string{
+		"", "12345678901", "12800138000", // 非 1[3-9] 开头
+		"1380013800", "138001380001", // 位数不对
+		"abcdefghijk", "1380013800a", "138 0013 8000", // 含非数字/空格
+	}
+	for _, v := range valid {
+		if !phonePattern.MatchString(v) {
+			t.Errorf("%q 应为合法手机号", v)
+		}
+	}
+	for _, v := range invalid {
+		if phonePattern.MatchString(v) {
+			t.Errorf("%q 应为非法手机号", v)
+		}
+	}
+}

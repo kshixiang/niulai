@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,6 +23,12 @@ var (
 	// ErrInvalidOrderParam 下单参数不合法（金额、填写项等）
 	ErrInvalidOrderParam = errors.New("下单参数不合法")
 )
+
+// 话费下单手机号字段标识与格式规则：中国大陆 11 位号码。
+// H5 下单页使用同一规则做前置提示，此处为服务端权威校验，防止绕过前端乱填。
+const phoneFieldKey = "phone"
+
+var phonePattern = regexp.MustCompile(`^1[3-9]\d{9}$`)
 
 // CreateOrderRequest 创建订单请求。
 // 实付金额一律由服务端按商品折扣与面值重算，前端展示的售价不参与计算。
@@ -162,6 +169,9 @@ func (s *OrderService) buildFormData(ctx context.Context, productID uint64, prod
 		}
 		if len([]rune(v)) > 128 {
 			return "", "", fmt.Errorf("%w: %s不能超过128字", ErrInvalidOrderParam, f.Label)
+		}
+		if f.FieldKey == phoneFieldKey && !phonePattern.MatchString(v) {
+			return "", "", fmt.Errorf("%w: 请输入正确的11位手机号", ErrInvalidOrderParam)
 		}
 		switch f.Type {
 		case OrderFieldTypeNumber:
