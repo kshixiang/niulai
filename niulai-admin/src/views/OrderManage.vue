@@ -1,7 +1,8 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { Search, Refresh, View } from '@element-plus/icons-vue'
-import { getOrders, getOrderDetail } from '@/api/order'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh, View, Edit } from '@element-plus/icons-vue'
+import { getOrders, getOrderDetail, updateOrder } from '@/api/order'
 
 const loading = ref(false)
 const rows = ref([])
@@ -69,6 +70,74 @@ async function openDetail(row) {
     detailVisible.value = false
   } finally {
     detailLoading.value = false
+  }
+}
+
+/* ---------- 编辑订单 ---------- */
+const editVisible = ref(false)
+const editSaving = ref(false)
+const editingId = ref(null)
+const editRow = ref(null) // 只读的身份信息，用于弹窗展示
+const editForm = reactive({
+  account: '',
+  status: 0,
+  amount: '',
+  received_amount: '',
+  cost_amount: '',
+})
+
+// 利润不允许手填，前端预览与后端重算规则保持一致
+const profitPreview = computed(() => {
+  const a = Number(editForm.amount)
+  const c = Number(editForm.cost_amount)
+  return Number.isFinite(a) && Number.isFinite(c) ? (a - c).toFixed(2) : '—'
+})
+
+function openEdit(row) {
+  editingId.value = row.id
+  editRow.value = row
+  editForm.account = row.account || ''
+  editForm.status = row.status
+  editForm.amount = String(row.amount ?? '')
+  editForm.received_amount = String(row.received_amount ?? '')
+  editForm.cost_amount = String(row.cost_amount ?? '')
+  editVisible.value = true
+}
+
+const moneyPattern = /^\d+(\.\d{1,2})?$/
+function validateEdit() {
+  const items = [
+    ['实付金额', editForm.amount],
+    ['已到账金额', editForm.received_amount],
+    ['渠道成本', editForm.cost_amount],
+  ]
+  for (const [label, v] of items) {
+    if (!moneyPattern.test(String(v).trim())) {
+      ElMessage.error(`${label}须为不小于0且最多2位小数的数值`)
+      return false
+    }
+  }
+  return true
+}
+
+async function submitEdit() {
+  if (editSaving.value || !validateEdit()) return
+  editSaving.value = true
+  try {
+    await updateOrder(editingId.value, {
+      account: editForm.account,
+      status: editForm.status,
+      amount: String(editForm.amount).trim(),
+      received_amount: String(editForm.received_amount).trim(),
+      cost_amount: String(editForm.cost_amount).trim(),
+    })
+    ElMessage.success('订单已更新')
+    editVisible.value = false
+    loadData()
+  } catch {
+    // 错误提示由 request.js 拦截器统一弹出
+  } finally {
+    editSaving.value = false
   }
 }
 
@@ -140,9 +209,10 @@ onMounted(loadData)
       <el-table-column label="下单时间" width="170" align="center">
         <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="90" align="center" fixed="right">
+      <el-table-column label="操作" width="150" align="center" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link :icon="View" @click="openDetail(row)">详情</el-button>
+          <el-button type="primary" link :icon="Edit" @click="openEdit(row)">编辑</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -199,6 +269,44 @@ onMounted(loadData)
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="editVisible" title="编辑订单" width="600px" destroy-on-close>
+      <el-form label-width="110px" class="edit-form">
+        <el-form-item label="订单号">
+          <span class="readonly">{{ editRow?.order_no || '—' }}</span>
+        </el-form-item>
+        <el-form-item label="商品 / 用户">
+          <span class="readonly">
+            {{ editRow?.product_name || '—' }} · {{ editRow ? userName(editRow) : '—' }}
+          </span>
+        </el-form-item>
+        <el-form-item label="充值账号">
+          <el-input v-model="editForm.account" placeholder="充值账号" maxlength="128" clearable />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="editForm.status" style="width: 100%">
+            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="实付金额">
+          <el-input v-model="editForm.amount" placeholder="0.00" />
+        </el-form-item>
+        <el-form-item label="已到账金额">
+          <el-input v-model="editForm.received_amount" placeholder="0.00" />
+        </el-form-item>
+        <el-form-item label="渠道成本">
+          <el-input v-model="editForm.cost_amount" placeholder="0.00" />
+        </el-form-item>
+        <el-form-item label="利润">
+          <span class="profit">¥{{ profitPreview }}</span>
+          <span class="form-hint">= 实付金额 − 渠道成本，保存后由服务端自动重算</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="submitEdit">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -263,5 +371,13 @@ onMounted(loadData)
 .fields__value {
   color: #1f2937;
   word-break: break-all;
+}
+.edit-form .readonly {
+  color: #6b7280;
+}
+.form-hint {
+  margin-left: 10px;
+  color: #9ca3af;
+  font-size: 12px;
 }
 </style>

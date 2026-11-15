@@ -2,16 +2,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"niulai/internal/model"
 )
 
-// AdminOrderService 运营后台订单管理（只读：列表与详情）。
+// AdminOrderService 运营后台订单管理（列表、详情与编辑）。
 // 与 C 端公开视图不同，后台视图包含渠道成本、利润等内部经营数据。
 type AdminOrderService struct {
 	db *gorm.DB
@@ -114,4 +116,92 @@ func (s *AdminOrderService) Get(ctx context.Context, id uint64) (*AdminOrderView
 	}
 	v.Fields = parseFormData(v.FormData)
 	return &v, nil
+}
+
+// UpdateAdminOrderRequest 后台编辑订单请求。
+// 订单号、商品、用户、渠道为订单身份，不允许修改；
+// 实付/成本/已到账可修正，利润由服务端按 实付-成本 自动重算，不接受前端传入。
+type UpdateAdminOrderRequest struct {
+	Account        *string `json:"account"`
+	Status         *int8   `json:"status"`
+	Amount         *string `json:"amount"`
+	ReceivedAmount *string `json:"received_amount"`
+	CostAmount     *string `json:"cost_amount"`
+}
+
+// maxOrderAmount 编辑时金额上限，避免超出 decimal(10,2) 列范围。
+var maxOrderAmount = decimal.NewFromInt(10000000)
+
+func parseOrderAmount(s string) (model.Money, error) {
+	raw := strings.TrimSpace(s)
+	if raw == "" {
+		return decimal.Decimal{}, fmt.Errorf("%w: 金额不能为空", ErrInvalidOrderParam)
+	}
+	d, err := decimal.NewFromString(raw)
+	if err != nil || d.IsNegative() || !d.Equal(d.Round(2)) || d.GreaterThan(maxOrderAmount) {
+		return decimal.Decimal{}, fmt.Errorf("%w: 金额须为不小于0且不超过2位小数的数值", ErrInvalidOrderParam)
+	}
+	return d, nil
+}
+
+// Update 编辑订单：仅更新显式传入的字段，返回更新后的详情视图。
+func (s *AdminOrderService) Update(ctx context.Context, id uint64, req *UpdateAdminOrderRequest) (*AdminOrderView, error) {
+	var o model.Order
+	if err := s.db.WithContext(ctx).First(&o, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("查询订单失败: %w", err)
+	}
+
+	updates := map[string]interface{}{}
+	if req.Account != nil {
+		account := strings.TrimSpace(*req.Account)
+		if len([]rune(account)) > 128 {
+			return nil, fmt.Errorf("%w: 充值账号不能超过128字", ErrInvalidOrderParam)
+		}
+		updates["account"] = account
+	}
+	if req.Status != nil {
+		if *req.Status < model.OrderStatusPending || *req.Status > model.OrderStatusRefunded {
+			return nil, fmt.Errorf("%w: 订单状态不合法", ErrInvalidOrderParam)
+		}
+		updates["status"] = *req.Status
+	}
+	if req.Amount != nil {
+		v, err := parseOrderAmount(*req.Amount)
+		if err != nil {
+			return nil, err
+		}
+		updates["amount"] = v
+	}
+	if req.ReceivedAmount != nil {
+		v, err := parseOrderAmount(*req.ReceivedAmount)
+		if err != nil {
+			return nil, err
+		}
+		updates["received_amount"] = v
+	}
+	if req.CostAmount != nil {
+		v, err := parseOrderAmount(*req.CostAmount)
+		if err != nil {
+			return nil, err
+		}
+		updates["cost_amount"] = v
+	}
+
+	// 利润始终按最终 实付-渠道成本 重算，避免手改金额后账目对不上
+	finalAmount, finalCost := o.Amount, o.CostAmount
+	if v, ok := updates["amount"]; ok {
+		finalAmount = v.(model.Money)
+	}
+	if v, ok := updates["cost_amount"]; ok {
+		finalCost = v.(model.Money)
+	}
+	updates["profit"] = finalAmount.Sub(finalCost)
+
+	if err := s.db.WithContext(ctx).Model(&o).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("更新订单失败: %w", err)
+	}
+	return s.Get(ctx, id)
 }

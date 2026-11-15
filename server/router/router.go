@@ -89,10 +89,11 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	users.GET("", adminUserCtl.List)
 	users.PUT("/:id/status", adminUserCtl.UpdateStatus)
 
-	// 订单管理（只读：列表与详情，含成本/利润等内部数据）
+	// 订单管理（列表、详情与编辑，含成本/利润等内部数据）
 	adminOrderSvc := service.NewAdminOrderService(db)
 	adminOrderCtl := controller.NewAdminOrderController(adminOrderSvc)
 	adminOrders := admin.Group("/orders")
 	adminOrders.GET("", adminOrderCtl.List)
 	adminOrders.GET("/:id", adminOrderCtl.Get)
+	adminOrders.PUT("/:id", adminOrderCtl.Update)
 }

@@ -106,6 +106,9 @@ func TestAdminOrderRoutesProtected(t *testing.T) {
 	if code := call(t, r, http.MethodGet, "/api/v1/admin/orders/1", ""); code != 401 {
 		t.Fatalf("订单详情接口未受 AdminRequired 保护, code=%d", code)
 	}
+	if code := call(t, r, http.MethodPut, "/api/v1/admin/orders/1", ""); code != 401 {
+		t.Fatalf("订单编辑接口未受 AdminRequired 保护, code=%d", code)
+	}
 }
 
 func TestCreateOrderRouteProtected(t *testing.T) {
