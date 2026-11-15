@@ -34,6 +34,38 @@ const (
 
 var fieldKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
+// carrierOptions 运营商下拉选项（JSON 数组字符串，与 product_order_fields.options 列格式一致）。
+const carrierOptions = `["移动","电信","联通","广电"]`
+
+// defaultPhoneFields 话费商品必须填写的字段。后台若已配置同名 field_key，则以后台配置为准。
+var defaultPhoneFields = []model.ProductOrderField{
+	{FieldKey: "phone", Label: "手机号", Type: OrderFieldTypeText, Required: 1, Placeholder: "请输入充值手机号"},
+	{FieldKey: "username", Label: "用户名", Type: OrderFieldTypeText, Required: 1, Placeholder: "请输入用户名"},
+	{FieldKey: "carrier", Label: "运营商", Type: OrderFieldTypeSelect, Required: 1, Placeholder: "请选择运营商", Options: carrierOptions},
+}
+
+// appendPhoneFields 为话费商品补齐后台未配置的必填项，并排在最前。
+// 商品详情（渲染下单页）与下单校验共用，保证两端字段与必填规则一致。
+func appendPhoneFields(fields []model.ProductOrderField, productType string) []model.ProductOrderField {
+	if productType != model.ProductTypePhone {
+		return fields
+	}
+	configured := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		configured[f.FieldKey] = true
+	}
+	missing := make([]model.ProductOrderField, 0, len(defaultPhoneFields))
+	for _, def := range defaultPhoneFields {
+		if !configured[def.FieldKey] {
+			missing = append(missing, def)
+		}
+	}
+	if len(missing) > 0 {
+		fields = append(missing, fields...)
+	}
+	return fields
+}
+
 // ProductService 商品管理业务逻辑
 type ProductService struct {
 	db *gorm.DB

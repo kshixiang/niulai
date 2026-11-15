@@ -21,6 +21,13 @@ const title = computed(() => (isEdit.value ? '编辑商品' : '新增商品'))
 
 // 与后端 CreateProductRequest 的 binding:"oneof=话费 卡券" 保持一致
 const TYPE_OPTIONS = ['话费', '卡券']
+
+// 话费商品必须填写的项：field_key 与服务端 defaultPhoneFields 一致，后台可自行调整其它内容
+const PHONE_DEFAULT_FIELDS = [
+  { field_key: 'phone', label: '手机号', type: 'text', required: true, placeholder: '请输入充值手机号', options: [] },
+  { field_key: 'username', label: '用户名', type: 'text', required: true, placeholder: '请输入用户名', options: [] },
+  { field_key: 'carrier', label: '运营商', type: 'select', required: true, placeholder: '请选择运营商', options: ['移动', '电信', '联通', '广电'] },
+]
 const FIELD_TYPE_OPTIONS = [
   { label: '文本', value: 'text' },
   { label: '数字', value: 'number' },
@@ -151,6 +158,16 @@ function removeDenomination(index) {
   form.denominations.splice(index, 1)
   nextTick(() => formRef.value?.clearValidate())
 }
+// 话费商品补齐后台未配置的手机号/用户名必填项，规则与服务端 appendPhoneFields 一致
+function ensurePhoneFields() {
+  if (form.type !== '话费') return
+  const existing = new Set(form.fields.map((f) => (f.field_key || '').trim()))
+  const missing = PHONE_DEFAULT_FIELDS.filter((f) => !existing.has(f.field_key))
+  if (missing.length) {
+    form.fields = [...missing.map((f) => ({ ...f, _uid: ++fieldUid })), ...form.fields]
+  }
+}
+
 function addField() {
   form.fields.push(newField())
   nextTick(() => formRef.value?.clearValidate())
@@ -202,9 +219,13 @@ watch(
   (open) => {
     if (!open) return
     Object.assign(form, emptyForm(), pick(props.product))
+    ensurePhoneFields() // 编辑存量话费商品时也补齐必填项
     nextTick(() => formRef.value?.clearValidate())
   },
 )
+
+// 新增商品时选择「话费」立即带出默认填写项
+watch(() => form.type, ensurePhoneFields)
 
 function beforeCoverUpload(file) {
   if (!COVER_TYPES.includes(file.type)) {

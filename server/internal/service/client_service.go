@@ -196,7 +196,7 @@ func (s *ClientService) GetProduct(ctx context.Context, id uint64) (*ClientProdu
 	}
 	v.Denominations = denoms
 
-	fields, err := s.fieldViews(ctx, id)
+	fields, err := s.fieldViews(ctx, id, v.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,8 @@ func (s *ClientService) denominationViews(ctx context.Context, productID uint64,
 }
 
 // fieldViews 查询商品下单填写项配置，options 解析为数组。
-func (s *ClientService) fieldViews(ctx context.Context, productID uint64) ([]ClientOrderFieldView, error) {
+// 话费商品补齐后台未配置的手机号、用户名必填项，供 H5 下单页动态渲染。
+func (s *ClientService) fieldViews(ctx context.Context, productID uint64, productType string) ([]ClientOrderFieldView, error) {
 	var rows []model.ProductOrderField
 	if err := s.db.WithContext(ctx).
 		Where("product_id = ?", productID).
@@ -235,6 +236,8 @@ func (s *ClientService) fieldViews(ctx context.Context, productID uint64) ([]Cli
 		Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("查询商品下单填写项失败: %w", err)
 	}
+	rows = appendPhoneFields(rows, productType)
+
 	out := make([]ClientOrderFieldView, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, ClientOrderFieldView{
@@ -246,6 +249,10 @@ func (s *ClientService) fieldViews(ctx context.Context, productID uint64) ([]Cli
 			Options:     parseOptions(r.Options),
 			Sort:        r.Sort,
 		})
+	}
+	// 兜底项排在前面，按展示顺序重排 sort，避免与后台配置的旧序号冲突
+	for i := range out {
+		out[i].Sort = i
 	}
 	return out, nil
 }

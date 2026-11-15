@@ -80,7 +80,7 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req *CreateOrd
 	amount := faceToPrice(face, p.Discount)
 	cost := faceToPrice(face, p.ChannelDiscount)
 
-	formData, account, err := s.buildFormData(ctx, req.ProductID, req.Fields, req.Account)
+	formData, account, err := s.buildFormData(ctx, req.ProductID, p.Type, req.Fields, req.Account)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +140,8 @@ func (s *OrderService) resolveFaceValue(ctx context.Context, req *CreateOrderReq
 }
 
 // buildFormData 按商品配置校验并归一化填写项，返回 JSON 快照与主充值账号。
-// 只落库后台配置的字段，前端多传的键一律忽略。
-func (s *OrderService) buildFormData(ctx context.Context, productID uint64, input map[string]string, account string) (string, string, error) {
+// 话费商品补齐后台未配置的手机号、用户名必填项；只落库配置/兜底字段，前端多传的键一律忽略。
+func (s *OrderService) buildFormData(ctx context.Context, productID uint64, productType string, input map[string]string, account string) (string, string, error) {
 	var fields []model.ProductOrderField
 	if err := s.db.WithContext(ctx).
 		Where("product_id = ? AND deleted_at IS NULL", productID).
@@ -149,6 +149,7 @@ func (s *OrderService) buildFormData(ctx context.Context, productID uint64, inpu
 		Find(&fields).Error; err != nil {
 		return "", "", fmt.Errorf("查询下单填写项失败: %w", err)
 	}
+	fields = appendPhoneFields(fields, productType)
 
 	items := make([]orderFormItem, 0, len(fields))
 	for _, f := range fields {
