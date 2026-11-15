@@ -1,18 +1,21 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { getProducts } from '@/api'
 
 const router = useRouter()
 
-/* 商品类型 → 展示图标/配色（只影响样式，不改变真实数据） */
+/* 商品类型 → 兜底图标/配色（未上传封面时展示，不改变真实数据） */
 const typeStyle = {
   话费: { icon: 'phone-o',    tone: 'blue'   },
   卡券: { icon: 'gift-card-o', tone: 'purple' },
   会员: { icon: 'vip-card-o',  tone: 'pink'   },
 }
 const styleOf = (type) => typeStyle[type] || { icon: 'shop-o', tone: 'cyan' }
+
+// 封面图由运营后台上传（相对 URL /api/v1/uploads/...），加载失败时回退到内置图标
+const coverFailed = reactive({})
 
 const products = ref([])
 const loading = ref(false)
@@ -122,7 +125,15 @@ const onBanner = () => showToast('更多商品敬请期待')
           :class="`card--${styleOf(item.type).tone}`"
           @click="onProduct(item)"
         >
-          <div class="card__thumb"><van-icon :name="styleOf(item.type).icon" size="28" /></div>
+          <div class="card__thumb">
+            <img
+              v-if="item.cover_image && !coverFailed[item.id]"
+              :src="item.cover_image"
+              alt=""
+              @error="coverFailed[item.id] = true"
+            />
+            <van-icon v-else :name="styleOf(item.type).icon" size="28" />
+          </div>
           <h4 class="card__name">{{ item.name }}</h4>
           <p class="card__desc">{{ item.description || '暂无描述' }}</p>
           <span class="card__badge">{{ discountText(item) }}</span>
@@ -252,6 +263,10 @@ const onBanner = () => showToast('更多商品敬请期待')
   display: grid; place-items: center; border-radius: 14px; color: #fff;
   background: linear-gradient(135deg, var(--card-tone, var(--c-brand)), var(--c-brand-2));
   box-shadow: 0 6px 14px rgba(0, 0, 0, .25);
+}
+.card__thumb img {
+  width: 100%; height: 100%;
+  object-fit: cover; border-radius: inherit;
 }
 .card__name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
 .card__desc {
