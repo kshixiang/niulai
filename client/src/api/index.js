@@ -28,6 +28,9 @@ export const getAgents = (params) => request.get(`${CLIENT}/agents`, { params })
 // 注册配置 GET /api/v1/register-config → { register_code_required }
 export const getRegisterConfig = () => request.get(`${CLIENT}/register-config`)
 
+// 公开汇率 GET /api/v1/exchange-rate → { usdt_cny_rate }（1 USDT 可兑换的 CNY 数量）
+export const getExchangeRate = () => request.get(`${CLIENT}/exchange-rate`)
+
 // 用户注册 POST /api/v1/auth/register
 export const register = (data) => request.post(`${CLIENT}/auth/register`, data)
 

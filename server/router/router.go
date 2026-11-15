@@ -22,6 +22,7 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	settingSvc := service.NewSettingService(db)
 	settingCtl := controller.NewSettingController(settingSvc)
 	v1.GET("/register-config", settingCtl.RegisterConfig)
+	v1.GET("/exchange-rate", settingCtl.ExchangeRate)
 	codeSvc := service.NewRegisterCodeService(db)
 	codeCtl := controller.NewRegisterCodeController(codeSvc)
 
@@ -36,7 +37,7 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	v1.GET("/agents", clientCtl.ListAgents)
 
 	// C 端下单：需用户登录，金额由服务端按商品折扣重算
-	orderSvc := service.NewOrderService(db)
+	orderSvc := service.NewOrderService(db, settingSvc)
 	orderCtl := controller.NewOrderController(orderSvc)
 	v1.POST("/orders", middleware.UserRequired(), orderCtl.Create)
 

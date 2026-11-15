@@ -2,7 +2,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getProductDetail, createOrder, getWallet } from '@/api'
+import { getProductDetail, createOrder, getWallet, getExchangeRate } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +16,7 @@ const customAmount = ref('') // 自定义面值
 const customFieldRef = ref(null)
 const showDesc = ref(false)
 const showInsufficient = ref(false) // 余额不足弹窗
+const rate = ref(6.69) // USDT→CNY 汇率，默认与后端缺省值一致
 
 const fields = computed(() => product.value?.fields || [])
 const denominations = computed(() => product.value?.denominations || [])
@@ -56,6 +57,12 @@ const discountAmount = computed(() =>
   sellPrice.value == null ? null : Math.round((amount.value - sellPrice.value) * 100) / 100,
 )
 
+// 折合 USDT：应付金额(CNY) ÷ 汇率，保留2位；与后端余额校验口径一致
+const requiredUSDT = computed(() => {
+  if (sellPrice.value == null || !Number.isFinite(rate.value) || rate.value <= 0) return null
+  return Math.round((sellPrice.value / rate.value) * 100) / 100
+})
+
 const fmt = (v) => (v == null || !Number.isFinite(Number(v)) ? '-' : Number(v).toFixed(2))
 
 const chipLabel = (d) => {
@@ -86,6 +93,14 @@ function goRecharge() {
 }
 
 onMounted(async () => {
+  // 汇率与商品详情并行拉取；取不到时保留默认值 6.69（与后端缺省一致），不阻断下单页
+  getExchangeRate()
+    .then((cfg) => {
+      const n = Number(cfg?.usdt_cny_rate)
+      if (Number.isFinite(n) && n > 0) rate.value = n
+    })
+    .catch(() => {})
+
   try {
     const data = await getProductDetail(route.params.id)
     product.value = data || null
@@ -133,9 +148,11 @@ async function submit() {
   if (submitting.value || !validate()) return
   submitting.value = true
   try {
-    // 余额预检：读取当前可用余额，与应付金额比较（价格均按 USDT 结算，直接比较）
+    // 余额预检：订单按 CNY 结算、余额按 USDT 结算，
+    // 折合 USDT = 应付¥ ÷ 汇率（保留2位），与可用余额比较；后端下单接口会再做权威校验
     const wallet = await getWallet()
-    if (Number(wallet.balance) < (sellPrice.value || 0)) {
+    const priceUSDT = requiredUSDT.value
+    if (priceUSDT != null && Number(wallet.balance) < priceUSDT) {
       showInsufficient.value = true
       return
     }
@@ -244,19 +261,25 @@ async function submit() {
           </van-cell-group>
         </section>
 
-        <!-- 汇总面板 -->
+        <!-- 汇总面板：订单金额按 RMB 结算，并按汇率折算出应付 USDT -->
         <section class="order__card summary">
           <div class="summary__row">
-            <span>订单金额</span><span>{{ amount ? fmt(amount) : '-' }} USDT</span>
+            <span>订单金额</span><span>¥{{ amount ? fmt(amount) : '-' }}</span>
           </div>
           <div class="summary__row">
             <span>折扣</span><span>{{ discountText }}</span>
           </div>
           <div class="summary__row">
-            <span>优惠金额</span><span>{{ fmt(discountAmount) }} USDT</span>
+            <span>优惠金额</span><span>¥{{ fmt(discountAmount) }}</span>
+          </div>
+          <div class="summary__row">
+            <span>汇率</span><span>1USDT={{ fmt(rate) }}CNY</span>
           </div>
           <div class="summary__row summary__row--total">
-            <span>应付金额</span><span class="summary__pay">{{ fmt(sellPrice) }} USDT</span>
+            <span>应付金额</span><span class="summary__pay">¥{{ fmt(sellPrice) }}</span>
+          </div>
+          <div v-if="requiredUSDT != null" class="summary__row summary__row--usdt">
+            <span>折合 USDT</span><span>{{ fmt(requiredUSDT) }} USDT</span>
           </div>
         </section>
       </template>
@@ -379,6 +402,7 @@ async function submit() {
 .summary__row + .summary__row { border-top: 1px solid var(--c-line); }
 .summary__row--total { color: var(--text-primary); font-weight: 700; }
 .summary__pay { font-size: 17px; font-weight: 800; color: var(--c-accent); }
+.summary__row--usdt span:last-child { font-weight: 700; color: var(--c-accent); }
 
 .order__footer {
   flex: 0 0 auto;

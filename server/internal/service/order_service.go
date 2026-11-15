@@ -57,13 +57,14 @@ type orderFormItem struct {
 	Value    string `json:"value"`
 }
 
-// OrderService C 端下单服务。
+// OrderService C 端下单服务。settingSvc 用于读取 USDT→CNY 汇率做余额换算。
 type OrderService struct {
-	db *gorm.DB
+	db         *gorm.DB
+	settingSvc *SettingService
 }
 
-func NewOrderService(db *gorm.DB) *OrderService {
-	return &OrderService{db: db}
+func NewOrderService(db *gorm.DB, settingSvc *SettingService) *OrderService {
+	return &OrderService{db: db, settingSvc: settingSvc}
 }
 
 // Create 创建订单：校验商品与面值、按后台折扣重算金额、校验填写项后落库。
@@ -94,7 +95,14 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req *CreateOrd
 		return nil, err
 	}
 
-	// 余额校验：价格均按 USDT 结算，可用余额须覆盖本单应付金额；未开通账户视为零余额
+	// 余额校验：订单金额按 CNY(RMB) 结算、充值余额按 USDT 结算。
+	// 按当前汇率把应付金额换算为所需 USDT（应付¥ ÷ 汇率，保留2位），再与可用余额比较；
+	// 未开通资金账户视为零余额。与 H5 下单页的预检口径一致，此处为服务端权威校验。
+	rate, err := s.settingSvc.GetUSDTCNYRate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	requiredUSDT := amount.Div(rate).Round(2)
 	var w model.Wallet
 	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&w).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -102,7 +110,7 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req *CreateOrd
 		}
 		return nil, fmt.Errorf("查询资金账户失败: %w", err)
 	}
-	if w.Balance.LessThan(amount) {
+	if w.Balance.LessThan(requiredUSDT) {
 		return nil, ErrInsufficientBalance
 	}
 

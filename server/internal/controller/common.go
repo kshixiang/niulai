@@ -82,7 +82,8 @@ func handleServiceError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrInvalidPrice),
 		errors.Is(err, service.ErrInvalidProductField),
 		errors.Is(err, service.ErrProductOffline),
-		errors.Is(err, service.ErrInvalidOrderParam):
+		errors.Is(err, service.ErrInvalidOrderParam),
+		errors.Is(err, service.ErrInvalidExchangeRate):
 		response.Fail(c, response.CodeInvalidParam, err.Error())
 	default:
 		c.Error(err)
