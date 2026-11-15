@@ -2,7 +2,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getProductDetail } from '@/api'
+import { getProductDetail, createOrder } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -109,10 +109,35 @@ function validate() {
   return true
 }
 
-function submit() {
+// 主充值账号取第一个有值的填写项（后台配置顺序中通常是手机号/充值账号）
+function accountOfFields() {
+  const hit = fields.value.find((f) => String(form[f.field_key] ?? '').trim())
+  return hit ? String(form[hit.field_key]).trim() : ''
+}
+
+async function submit() {
   if (submitting.value || !validate()) return
-  // 本期只做下单页与金额试算，不创建订单
-  showToast('下单功能即将开放')
+  submitting.value = true
+  try {
+    const payload = {
+      product_id: Number(route.params.id),
+      fields: { ...form },
+      account: accountOfFields(),
+    }
+    // 预设档只传 id，面值由后端读库取权威值；自定义金额才传前端输入的面值
+    if (selectedId.value != null) {
+      payload.denomination_id = selectedId.value
+    } else {
+      payload.face_value = String(amount.value)
+    }
+    const data = await createOrder(payload)
+    showToast('下单成功')
+    router.replace(`/order-detail/${data.id}`)
+  } catch {
+    // 错误提示由 request.js 拦截器统一弹出
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 

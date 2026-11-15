@@ -15,6 +15,12 @@ const routes = [
         meta: { title: '商品管理' },
       },
       {
+        path: 'orders',
+        name: 'Orders',
+        component: () => import('@/views/OrderManage.vue'),
+        meta: { title: '订单管理' },
+      },
+      {
         path: 'channels',
         name: 'Channels',
         component: () => import('@/views/ChannelManage.vue'),

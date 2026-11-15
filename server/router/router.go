@@ -35,6 +35,11 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	v1.GET("/orders/:id", clientCtl.GetOrder)
 	v1.GET("/agents", clientCtl.ListAgents)
 
+	// C 端下单：需用户登录，金额由服务端按商品折扣重算
+	orderSvc := service.NewOrderService(db)
+	orderCtl := controller.NewOrderController(orderSvc)
+	v1.POST("/orders", middleware.UserRequired(), orderCtl.Create)
+
 	// C 端用户认证：注册/登录免鉴权，资料查询需 UserRequired
 	userSvc := service.NewUserService(db, settingSvc, codeSvc)
 	userCtl := controller.NewUserController(userSvc)
@@ -83,4 +88,11 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	users := admin.Group("/users")
 	users.GET("", adminUserCtl.List)
 	users.PUT("/:id/status", adminUserCtl.UpdateStatus)
+
+	// 订单管理（只读：列表与详情，含成本/利润等内部数据）
+	adminOrderSvc := service.NewAdminOrderService(db)
+	adminOrderCtl := controller.NewAdminOrderController(adminOrderSvc)
+	adminOrders := admin.Group("/orders")
+	adminOrders.GET("", adminOrderCtl.List)
+	adminOrders.GET("/:id", adminOrderCtl.Get)
 }

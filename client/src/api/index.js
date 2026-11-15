@@ -19,6 +19,9 @@ export const getOrderCounts = () => request.get(`${CLIENT}/orders/counts`)
 // 订单详情 GET /api/v1/orders/:id
 export const getOrderDetail = (id) => request.get(`${CLIENT}/orders/${id}`)
 
+// 创建订单 POST /api/v1/orders（需 Bearer token）
+export const createOrder = (data) => request.post(`${CLIENT}/orders`, data)
+
 // 代理 GET /api/v1/agents?page=&page_size=
 export const getAgents = (params) => request.get(`${CLIENT}/agents`, { params })
 

@@ -96,3 +96,30 @@ func TestAdminUserRoutesProtected(t *testing.T) {
 		t.Fatalf("用户状态接口未受 AdminRequired 保护, code=%d", code)
 	}
 }
+
+func TestAdminOrderRoutesProtected(t *testing.T) {
+	r := newTestRouter(t)
+	// 未携带令牌：命中路由后被 AdminRequired 拦截返回 401；若路由未注册会得到 404
+	if code := call(t, r, http.MethodGet, "/api/v1/admin/orders", ""); code != 401 {
+		t.Fatalf("订单列表接口未受 AdminRequired 保护, code=%d", code)
+	}
+	if code := call(t, r, http.MethodGet, "/api/v1/admin/orders/1", ""); code != 401 {
+		t.Fatalf("订单详情接口未受 AdminRequired 保护, code=%d", code)
+	}
+}
+
+func TestCreateOrderRouteProtected(t *testing.T) {
+	r := newTestRouter(t)
+	// 未携带令牌：命中路由后被 UserRequired 拦截返回 401；若路由未注册会得到 404
+	if code := call(t, r, http.MethodPost, "/api/v1/orders", ""); code != 401 {
+		t.Fatalf("下单接口未受 UserRequired 保护, code=%d", code)
+	}
+	// 已登录但无请求体：由 bindJSON 返回 400，不会触发数据库操作
+	userToken, err := jwt.SignUser(42, routerTestSecret, 24)
+	if err != nil {
+		t.Fatalf("签发用户令牌失败: %v", err)
+	}
+	if code := call(t, r, http.MethodPost, "/api/v1/orders", userToken); code != 400 {
+		t.Fatalf("下单接口未正确响应参数校验, code=%d", code)
+	}
+}

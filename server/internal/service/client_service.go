@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -97,17 +98,41 @@ type ClientProductDetailView struct {
 	Fields        []ClientOrderFieldView   `gorm:"-" json:"fields"`
 }
 
+// OrderFormFieldView 订单填写项对外视图，仅暴露中文名与填写值。
+type OrderFormFieldView struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// parseFormData 解析订单填写项快照（下单时落库的配置快照），仅对外暴露 label 与值。
+func parseFormData(s string) []OrderFormFieldView {
+	if s == "" {
+		return nil
+	}
+	var items []orderFormItem
+	if err := json.Unmarshal([]byte(s), &items); err != nil {
+		return nil
+	}
+	out := make([]OrderFormFieldView, 0, len(items))
+	for _, it := range items {
+		out = append(out, OrderFormFieldView{Label: it.Label, Value: it.Value})
+	}
+	return out
+}
+
 // ClientOrderView 订单对外视图
 type ClientOrderView struct {
-	ID             uint64      `gorm:"column:id"             json:"id"`
-	OrderNo        string      `gorm:"column:order_no"       json:"order_no"`
-	ProductName    string      `gorm:"column:product_name"   json:"product_name"`
-	Amount         model.Money `gorm:"column:amount"         json:"amount"`
-	ReceivedAmount model.Money `gorm:"column:received_amount" json:"received_amount"`
-	RemainingAmount model.Money `gorm:"-"                     json:"remaining_amount"` // 派生：订单金额 - 已到账金额
-	Status         int8        `gorm:"column:status"         json:"status"`
-	Account        string      `gorm:"column:account"        json:"account"`
-	CreatedAt      time.Time   `gorm:"column:created_at"     json:"created_at"`
+	ID              uint64               `gorm:"column:id"             json:"id"`
+	OrderNo         string               `gorm:"column:order_no"       json:"order_no"`
+	ProductName     string               `gorm:"column:product_name"   json:"product_name"`
+	Amount          model.Money          `gorm:"column:amount"         json:"amount"`
+	ReceivedAmount  model.Money          `gorm:"column:received_amount" json:"received_amount"`
+	RemainingAmount model.Money          `gorm:"-"                     json:"remaining_amount"` // 派生：订单金额 - 已到账金额
+	Status          int8                 `gorm:"column:status"         json:"status"`
+	Account         string               `gorm:"column:account"        json:"account"`
+	FormData        string               `gorm:"column:form_data"      json:"-"`
+	Fields          []OrderFormFieldView `gorm:"-"                     json:"fields,omitempty"`
+	CreatedAt       time.Time            `gorm:"column:created_at"     json:"created_at"`
 }
 
 // ClientAgentView 代理对外视图
@@ -296,7 +321,7 @@ func (s *ClientService) GetOrder(ctx context.Context, id uint64) (*ClientOrderVi
 	var v ClientOrderView
 	if err := s.db.WithContext(ctx).Table("orders o").
 		Joins("LEFT JOIN products p ON p.id = o.product_id AND p.deleted_at IS NULL").
-		Select("o.id, o.order_no, COALESCE(p.name, '') AS product_name, o.amount, o.received_amount, o.status, o.account, o.created_at").
+		Select("o.id, o.order_no, COALESCE(p.name, '') AS product_name, o.amount, o.received_amount, o.status, o.account, o.form_data, o.created_at").
 		Where("o.id = ? AND o.deleted_at IS NULL", id).
 		Scan(&v).Error; err != nil {
 		return nil, fmt.Errorf("查询订单详情失败: %w", err)
@@ -305,6 +330,7 @@ func (s *ClientService) GetOrder(ctx context.Context, id uint64) (*ClientOrderVi
 		return nil, ErrOrderNotFound
 	}
 	v.RemainingAmount = v.Amount.Sub(v.ReceivedAmount)
+	v.Fields = parseFormData(v.FormData)
 	return &v, nil
 }
 

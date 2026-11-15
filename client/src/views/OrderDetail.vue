@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { getOrderDetail } from '@/api'
@@ -9,6 +9,11 @@ const router = useRouter()
 
 const loading = ref(true)
 const order = ref(null)
+
+// 详情已单列「充值账号」，这里只展示下单时填写的其余项，避免重复
+const extraFields = computed(() =>
+  (order.value?.fields || []).filter((f) => f.value !== order.value?.account),
+)
 
 /* 订单状态：与后端 model.OrderStatus* 保持一致（待支付/已支付/充值中/成功/失败/已退款） */
 const statusMap = {
@@ -89,6 +94,10 @@ onMounted(async () => {
           <div class="row">
             <span class="row__label">充值账号</span>
             <span class="row__value">{{ order.account || '—' }}</span>
+          </div>
+          <div v-for="(f, i) in extraFields" :key="i" class="row">
+            <span class="row__label">{{ f.label }}</span>
+            <span class="row__value">{{ f.value }}</span>
           </div>
           <div class="row">
             <span class="row__label">下单时间</span>
