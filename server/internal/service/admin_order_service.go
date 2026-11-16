@@ -23,6 +23,9 @@ func NewAdminOrderService(db *gorm.DB) *AdminOrderService {
 	return &AdminOrderService{db: db}
 }
 
+// ErrOrderFundConflict 订单资金状态已变更（重复结算或非法跃迁），需刷新重试。
+var ErrOrderFundConflict = errors.New("订单资金状态已变更，请刷新重试")
+
 // ListAdminOrderRequest 后台订单分页查询。keyword 匹配订单号/充值账号/用户账号/商品名。
 type ListAdminOrderRequest struct {
 	Status   *int8  `form:"status"`
@@ -46,6 +49,9 @@ type AdminOrderView struct {
 	ReceivedAmount model.Money          `gorm:"column:received_amount" json:"received_amount"`
 	CostAmount     model.Money          `gorm:"column:cost_amount"     json:"cost_amount"`
 	Profit         model.Money          `gorm:"column:profit"          json:"profit"`
+	FrozenUSDT     model.Money          `gorm:"column:frozen_usdt"     json:"frozen_usdt"`
+	UsdtCnyRate    model.Money          `gorm:"column:usdt_cny_rate"   json:"usdt_cny_rate"`
+	FundStatus     int8                 `gorm:"column:fund_status"     json:"fund_status"`
 	Status         int8                 `gorm:"column:status"          json:"status"`
 	Account        string               `gorm:"column:account"         json:"account"`
 	FormData       string               `gorm:"column:form_data"       json:"-"`
@@ -60,6 +66,7 @@ const adminOrderSelect = `o.id, o.order_no, o.user_id,
 	o.product_id, COALESCE(p.name, '') AS product_name,
 	o.channel_id, COALESCE(ch.name, '') AS channel_name,
 	o.amount, o.received_amount, o.cost_amount, o.profit,
+	o.frozen_usdt, o.usdt_cny_rate, o.fund_status,
 	o.status, o.account, o.form_data, o.callback_at, o.created_at`
 
 func (s *AdminOrderService) base(ctx context.Context) *gorm.DB {
@@ -200,8 +207,152 @@ func (s *AdminOrderService) Update(ctx context.Context, id uint64, req *UpdateAd
 	}
 	updates["profit"] = finalAmount.Sub(finalCost)
 
-	if err := s.db.WithContext(ctx).Model(&o).Updates(updates).Error; err != nil {
+	// 状态变更为结算态（成功/失败/退款）时触发资金动作，需在事务内与订单更新原子提交。
+	var plan fundPlan
+	var needFund bool
+	if req.Status != nil && *req.Status != o.Status {
+		var conflict bool
+		plan, needFund, conflict = planFundTransition(*req.Status, o.FundStatus, o.FrozenUSDT)
+		if conflict {
+			return nil, ErrOrderFundConflict
+		}
+	}
+
+	if needFund {
+		updates["fund_status"] = plan.newFund
+		if err := s.settleOrder(ctx, &o, updates, plan); err != nil {
+			return nil, err
+		}
+	} else if err := s.db.WithContext(ctx).Model(&o).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("更新订单失败: %w", err)
 	}
 	return s.Get(ctx, id)
+}
+
+// fundPlan 描述一次订单结算所需的资金动作。
+type fundPlan struct {
+	newFund     int8                   // 目标资金状态
+	walletUpd   map[string]interface{} // 钱包条件更新表达式（不含 version，由 settleOrder 追加）
+	ledgerType  int8                   // 资金流水类型
+	remark      string                 // 流水备注
+	frozenGuard bool                   // 是否需要 frozen_balance >= 冻结额 守卫
+}
+
+// planFundTransition 根据目标订单状态与当前资金状态计算资金动作。
+// ok=false 表示无需资金动作（幂等/非结算态/历史订单）；conflict=true 表示非法跃迁。
+// X 取订单下单快照 FrozenUSDT，与事后手改的 amount 无关。
+func planFundTransition(target, current int8, x model.Money) (p fundPlan, ok bool, conflict bool) {
+	if !x.IsPositive() {
+		// 历史订单未冻结金额，不触发资金动作
+		return fundPlan{}, false, false
+	}
+	switch target {
+	case model.OrderStatusSuccess: // 成功：冻结转实际扣款
+		switch current {
+		case model.OrderFundFrozen:
+			return fundPlan{
+				newFund:     model.OrderFundCharged,
+				walletUpd:   map[string]interface{}{"frozen_balance": gorm.Expr("frozen_balance - ?", x)},
+				ledgerType:  model.WalletTxDeduct,
+				remark:      "订单成功扣款",
+				frozenGuard: true,
+			}, true, false
+		case model.OrderFundCharged: // 已扣款，幂等
+			return fundPlan{}, false, false
+		default: // 已退还不能再扣款
+			return fundPlan{}, false, true
+		}
+	case model.OrderStatusFailed, model.OrderStatusRefunded: // 失败/退款：归还
+		switch current {
+		case model.OrderFundFrozen: // 冻结直接解冻归还
+			ledgerType, remark := int8(model.WalletTxRefund), "订单退款归还"
+			if target == model.OrderStatusFailed {
+				ledgerType, remark = model.WalletTxUnfreezeFailed, "订单失败解冻归还"
+			}
+			return fundPlan{
+				newFund: model.OrderFundReturned,
+				walletUpd: map[string]interface{}{
+					"frozen_balance": gorm.Expr("frozen_balance - ?", x),
+					"balance":        gorm.Expr("balance + ?", x),
+				},
+				ledgerType:  ledgerType,
+				remark:      remark,
+				frozenGuard: true,
+			}, true, false
+		case model.OrderFundCharged: // 已扣款后退款：冻结已归零，只加可用余额
+			return fundPlan{
+				newFund:    model.OrderFundReturned,
+				walletUpd:  map[string]interface{}{"balance": gorm.Expr("balance + ?", x)},
+				ledgerType: model.WalletTxRefund,
+				remark:     "已扣款订单退款归还",
+			}, true, false
+		default: // 已退还，幂等
+			return fundPlan{}, false, false
+		}
+	}
+	// 非结算态（待支付/已支付/充值中）不触发资金动作
+	return fundPlan{}, false, false
+}
+
+// settleOrder 在单事务内完成：订单资金状态抢占（幂等闸）+ 钱包条件更新 + 资金流水。
+// 订单以 fund_status 旧值作条件更新，并发/重复结算只有一方 RowsAffected>0，避免重复出金。
+func (s *AdminOrderService) settleOrder(ctx context.Context, o *model.Order, updates map[string]interface{}, plan fundPlan) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 1) 抢占订单资金状态：仅当 fund_status 仍为读到的旧值时才更新
+		res := tx.Model(&model.Order{}).
+			Where("id = ? AND fund_status = ? AND deleted_at IS NULL", o.ID, o.FundStatus).
+			Updates(updates)
+		if res.Error != nil {
+			return fmt.Errorf("更新订单失败: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return ErrOrderFundConflict
+		}
+
+		// 2) 钱包条件更新：版本守卫（必要时加冻结余额守卫）
+		var w model.Wallet
+		if err := tx.Where("user_id = ?", o.UserID).First(&w).Error; err != nil {
+			return fmt.Errorf("查询资金账户失败: %w", err)
+		}
+		where := "user_id = ? AND version = ?"
+		args := []interface{}{o.UserID, w.Version}
+		if plan.frozenGuard {
+			where += " AND frozen_balance >= ?"
+			args = append(args, o.FrozenUSDT)
+		}
+		walletUpd := make(map[string]interface{}, len(plan.walletUpd)+1)
+		for k, v := range plan.walletUpd {
+			walletUpd[k] = v
+		}
+		walletUpd["version"] = gorm.Expr("version + 1")
+		wr := tx.Model(&model.Wallet{}).Where(where, args...).Updates(walletUpd)
+		if wr.Error != nil {
+			return fmt.Errorf("更新资金账户失败: %w", wr.Error)
+		}
+		if wr.RowsAffected == 0 {
+			return ErrOrderFundConflict
+		}
+
+		// 3) 读变动后余额并写资金流水
+		var after model.Wallet
+		if err := tx.Where("user_id = ?", o.UserID).First(&after).Error; err != nil {
+			return fmt.Errorf("查询变动后资金账户失败: %w", err)
+		}
+		txn := model.WalletTransaction{
+			UserID:        o.UserID,
+			OrderID:       o.ID,
+			Type:          plan.ledgerType,
+			Amount:        o.FrozenUSDT,
+			BalanceBefore: w.Balance,
+			BalanceAfter:  after.Balance,
+			FrozenBefore:  w.FrozenBalance,
+			FrozenAfter:   after.FrozenBalance,
+			Ref:           o.OrderNo,
+			Remark:        plan.remark,
+		}
+		if err := tx.Create(&txn).Error; err != nil {
+			return fmt.Errorf("记录资金流水失败: %w", err)
+		}
+		return nil
+	})
 }

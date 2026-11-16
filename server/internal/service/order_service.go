@@ -95,40 +95,88 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req *CreateOrd
 		return nil, err
 	}
 
-	// 余额校验：订单金额按 CNY(RMB) 结算、充值余额按 USDT 结算。
-	// 按当前汇率把应付金额换算为所需 USDT（应付¥ ÷ 汇率，保留2位），再与可用余额比较；
-	// 未开通资金账户视为零余额。与 H5 下单页的预检口径一致，此处为服务端权威校验。
+	// 余额换算：订单金额按 CNY(RMB) 结算、充值余额按 USDT 结算。
+	// 应付¥ ÷ 汇率 = 所需 USDT（保留2位），与 H5 下单页预检口径一致，此处为服务端权威校验。
 	rate, err := s.settingSvc.GetUSDTCNYRate(ctx)
 	if err != nil {
 		return nil, err
 	}
 	requiredUSDT := amount.Div(rate).Round(2)
-	var w model.Wallet
-	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&w).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInsufficientBalance
-		}
-		return nil, fmt.Errorf("查询资金账户失败: %w", err)
-	}
-	if w.Balance.LessThan(requiredUSDT) {
-		return nil, ErrInsufficientBalance
+	if !requiredUSDT.IsPositive() {
+		return nil, fmt.Errorf("%w: 应付金额异常", ErrInvalidOrderParam)
 	}
 
-	order := &model.Order{
-		OrderNo:        genOrderNo(),
-		UserID:         userID,
-		ProductID:      p.ID,
-		ChannelID:      p.ChannelID,
-		Amount:         amount,
-		ReceivedAmount: decimal.Zero,
-		CostAmount:     cost,
-		Profit:         amount.Sub(cost),
-		Status:         model.OrderStatusPending,
-		Account:        account,
-		FormData:       formData,
-	}
-	if err := s.db.WithContext(ctx).Create(order).Error; err != nil {
-		return nil, fmt.Errorf("创建订单失败: %w", err)
+	// 事务内冻结余额：条件 UPDATE + 乐观锁守卫防并发超卖，随后落单并记资金流水。
+	// 冻结金额与汇率快照写入订单，作为后续扣款/退还的唯一依据。
+	var order *model.Order
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var w model.Wallet
+		if err := tx.Where("user_id = ?", userID).First(&w).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInsufficientBalance
+			}
+			return fmt.Errorf("查询资金账户失败: %w", err)
+		}
+
+		// 余额充足且版本未变才冻结；RowsAffected=0 表示余额不足或并发冲突，统一拒绝。
+		res := tx.Model(&model.Wallet{}).
+			Where("user_id = ? AND balance >= ? AND version = ?", userID, requiredUSDT, w.Version).
+			Updates(map[string]interface{}{
+				"balance":        gorm.Expr("balance - ?", requiredUSDT),
+				"frozen_balance": gorm.Expr("frozen_balance + ?", requiredUSDT),
+				"version":        gorm.Expr("version + 1"),
+			})
+		if res.Error != nil {
+			return fmt.Errorf("冻结余额失败: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return ErrInsufficientBalance
+		}
+
+		var after model.Wallet
+		if err := tx.Where("user_id = ?", userID).First(&after).Error; err != nil {
+			return fmt.Errorf("查询变动后资金账户失败: %w", err)
+		}
+
+		order = &model.Order{
+			OrderNo:        genOrderNo(),
+			UserID:         userID,
+			ProductID:      p.ID,
+			ChannelID:      p.ChannelID,
+			Amount:         amount,
+			ReceivedAmount: decimal.Zero,
+			CostAmount:     cost,
+			Profit:         amount.Sub(cost),
+			FrozenUSDT:     requiredUSDT,
+			UsdtCnyRate:    rate,
+			FundStatus:     model.OrderFundFrozen,
+			Status:         model.OrderStatusPending,
+			Account:        account,
+			FormData:       formData,
+		}
+		if err := tx.Create(order).Error; err != nil {
+			return fmt.Errorf("创建订单失败: %w", err)
+		}
+
+		txn := model.WalletTransaction{
+			UserID:        userID,
+			OrderID:       order.ID,
+			Type:          model.WalletTxOrderFreeze,
+			Amount:        requiredUSDT,
+			BalanceBefore: w.Balance,
+			BalanceAfter:  after.Balance,
+			FrozenBefore:  w.FrozenBalance,
+			FrozenAfter:   after.FrozenBalance,
+			Ref:           order.OrderNo,
+			Remark:        "下单冻结",
+		}
+		if err := tx.Create(&txn).Error; err != nil {
+			return fmt.Errorf("记录资金流水失败: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return &CreateOrderView{
 		ID:      order.ID,
