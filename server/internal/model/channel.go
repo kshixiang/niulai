@@ -9,11 +9,12 @@ const (
 // Channel 上游渠道。登录密码不参与 JSON 序列化，避免泄露。
 type Channel struct {
 	BaseModel
-	Name     string `gorm:"column:name;type:varchar(128);not null;default:'';comment:渠道名称" json:"name"`
-	Category string `gorm:"column:category;type:varchar(32);not null;default:'';comment:商品分类 话费/卡券" json:"category"`
-	APIURL   string `gorm:"column:api_url;type:varchar(512);not null;default:'';comment:登录地址" json:"api_url"`
-	APIKey   string `gorm:"column:api_key;type:varchar(255);not null;default:'';comment:登录密码" json:"-"`
-	Status   int8   `gorm:"column:status;type:tinyint;not null;default:1;index;comment:健康状态 1可用 0熔断" json:"status"`
+	Name         string `gorm:"column:name;type:varchar(128);not null;default:'';comment:渠道名称" json:"name"`
+	Category     string `gorm:"column:category;type:varchar(32);not null;default:'';comment:商品分类固定标识" json:"category"`
+	CategoryName string `gorm:"-" json:"category_name"`
+	APIURL       string `gorm:"column:api_url;type:varchar(512);not null;default:'';comment:登录地址" json:"api_url"`
+	APIKey       string `gorm:"column:api_key;type:varchar(255);not null;default:'';comment:登录密码" json:"-"`
+	Status       int8   `gorm:"column:status;type:tinyint;not null;default:1;index;comment:健康状态 1可用 0熔断" json:"status"`
 }
 
 func (Channel) TableName() string { return "channels" }

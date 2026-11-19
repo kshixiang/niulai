@@ -75,10 +75,14 @@ func handleServiceError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrProductNotFound),
 		errors.Is(err, service.ErrOrderNotFound),
 		errors.Is(err, service.ErrChannelNotFound),
+		errors.Is(err, service.ErrCategoryNotFound),
 		errors.Is(err, service.ErrRegisterCodeNotFound),
 		errors.Is(err, gorm.ErrRecordNotFound):
 		response.Fail(c, response.CodeNotFound, err.Error())
 	case errors.Is(err, service.ErrChannelUnusable),
+		errors.Is(err, service.ErrInvalidCategory),
+		errors.Is(err, service.ErrInvalidCategoryName),
+		errors.Is(err, service.ErrCategoryNameExists),
 		errors.Is(err, service.ErrInvalidRecharge),
 		errors.Is(err, service.ErrRechargeUnavailable),
 		errors.Is(err, service.ErrRechargeAddressChanged),

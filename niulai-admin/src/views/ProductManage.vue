@@ -118,6 +118,9 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+      <el-table-column label="商品分类" min-width="110" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.type_name || row.type || '—' }}</template>
+      </el-table-column>
       <el-table-column label="渠道折扣" width="100" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.channel_discount != null" type="warning" effect="light" size="small">

@@ -27,7 +27,7 @@ func NewChannelService(db *gorm.DB) *ChannelService {
 // CreateChannelRequest 新增渠道请求。登录地址与登录密码为选填。
 type CreateChannelRequest struct {
 	Name     string `json:"name" binding:"required,max=128"`
-	Category string `json:"category" binding:"required,oneof=话费 卡券"`
+	Category string `json:"category" binding:"required,max=32"`
 	APIURL   string `json:"api_url" binding:"omitempty,max=512"`
 	APIKey   string `json:"api_key" binding:"omitempty,max=255"`
 	Status   int8   `json:"status" binding:"oneof=0 1"`
@@ -37,7 +37,7 @@ type CreateChannelRequest struct {
 // api_url / api_key 为空表示不修改（列表不回显密码，编辑时无法原样带回）。
 type UpdateChannelRequest struct {
 	Name     string `json:"name" binding:"required,max=128"`
-	Category string `json:"category" binding:"required,oneof=话费 卡券"`
+	Category string `json:"category" binding:"required,max=32"`
 	APIURL   string `json:"api_url" binding:"omitempty,max=512"`
 	APIKey   string `json:"api_key" binding:"omitempty,max=255"`
 	Status   int8   `json:"status" binding:"oneof=0 1"`
@@ -51,6 +51,9 @@ type ListChannelRequest struct {
 
 // Create 新增渠道
 func (s *ChannelService) Create(ctx context.Context, req *CreateChannelRequest) (*model.Channel, error) {
+	if err := ensureCategoryExists(ctx, s.db, req.Category); err != nil {
+		return nil, err
+	}
 	ch := &model.Channel{
 		Name:     req.Name,
 		Category: req.Category,
@@ -80,11 +83,25 @@ func (s *ChannelService) List(ctx context.Context, page, pageSize int) ([]model.
 		Find(&list).Error; err != nil {
 		return nil, 0, fmt.Errorf("查询渠道列表失败: %w", err)
 	}
+	codes := make([]string, 0, len(list))
+	for _, ch := range list {
+		codes = append(codes, ch.Category)
+	}
+	names, err := categoryNames(ctx, s.db, codes)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range list {
+		list[i].CategoryName = names[list[i].Category]
+	}
 	return list, total, nil
 }
 
 // Update 更新渠道信息。api_url / api_key 仅在非空时覆盖，避免编辑时清空密码。
 func (s *ChannelService) Update(ctx context.Context, id uint64, req *UpdateChannelRequest) (*model.Channel, error) {
+	if err := ensureCategoryExists(ctx, s.db, req.Category); err != nil {
+		return nil, err
+	}
 	var ch model.Channel
 	if err := s.db.WithContext(ctx).First(&ch, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

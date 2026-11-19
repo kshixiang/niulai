@@ -23,8 +23,11 @@ const activeCategory = ref('all')
 
 /* 分类从真实商品数据派生，避免前端写死分类与后端 type 对不上 */
 const categories = computed(() => {
-  const types = [...new Set(products.value.map((p) => p.type).filter(Boolean))]
-  return [{ key: 'all', label: '全部' }, ...types.map((t) => ({ key: t, label: t }))]
+  const types = new Map()
+  for (const p of products.value) {
+    if (p.type) types.set(p.type, { key: p.type, label: p.type_name || p.type })
+  }
+  return [{ key: 'all', label: '全部' }, ...types.values()]
 })
 
 const visibleProducts = computed(() =>

@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { createChannel, updateChannel } from '@/api/channel'
+import CategorySelect from './CategorySelect.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -15,9 +16,6 @@ const visible = computed({
 })
 const isEdit = computed(() => !!props.channel?.id)
 const title = computed(() => (isEdit.value ? '编辑渠道' : '新增渠道'))
-
-// 与商品类型、后端 binding:"oneof=话费 卡券" 保持一致
-const CATEGORY_OPTIONS = ['话费', '卡券']
 
 const emptyForm = () => ({
   name: '',
@@ -95,9 +93,7 @@ async function submit() {
       </el-form-item>
 
       <el-form-item label="商品分类" prop="category">
-        <el-select v-model="form.category" placeholder="请选择商品分类" style="width: 100%">
-          <el-option v-for="c in CATEGORY_OPTIONS" :key="c" :label="c" :value="c" />
-        </el-select>
+        <CategorySelect v-model="form.category" :active="visible" />
       </el-form-item>
 
       <el-form-item label="登录地址" prop="api_url">

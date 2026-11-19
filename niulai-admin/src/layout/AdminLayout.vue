@@ -13,6 +13,7 @@ const title = computed(() => route.meta.title || '控制台')
 const username = computed(() => getUsername() || '运营管理员')
 const menus = [
   { path: '/products', title: '商品管理', icon: Goods },
+  { path: '/categories', title: '分类管理', icon: Tickets },
   { path: '/orders', title: '订单管理', icon: Tickets },
   { path: '/recharges', title: '充值管理', icon: Tickets },
   { path: '/channels', title: '渠道管理', icon: Connection },

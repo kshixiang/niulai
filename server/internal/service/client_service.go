@@ -81,6 +81,7 @@ type ClientProductView struct {
 	ID          uint64      `gorm:"column:id"           json:"id"`
 	Name        string      `gorm:"column:name"         json:"name"`
 	Type        string      `gorm:"column:type"         json:"type"`
+	TypeName    string      `gorm:"-"                   json:"type_name"`
 	CoverImage  string      `gorm:"column:cover_image"  json:"cover_image"`
 	Discount    model.Money `gorm:"column:discount"     json:"discount"`
 	Description string      `gorm:"column:description"  json:"description"`
@@ -91,6 +92,7 @@ type ClientProductDetailView struct {
 	ID            uint64                   `gorm:"column:id"           json:"id"`
 	Name          string                   `gorm:"column:name"         json:"name"`
 	Type          string                   `gorm:"column:type"         json:"type"`
+	TypeName      string                   `gorm:"-"                   json:"type_name"`
 	CoverImage    string                   `gorm:"column:cover_image"  json:"cover_image"`
 	Discount      model.Money              `gorm:"column:discount"     json:"discount"`
 	Description   string                   `gorm:"column:description"  json:"description"`
@@ -172,6 +174,17 @@ func (s *ClientService) ListProducts(ctx context.Context, req *ListClientProduct
 		Scan(&list).Error; err != nil {
 		return nil, 0, fmt.Errorf("查询在售商品失败: %w", err)
 	}
+	codes := make([]string, 0, len(list))
+	for _, p := range list {
+		codes = append(codes, p.Type)
+	}
+	names, err := categoryNames(ctx, s.db, codes)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range list {
+		list[i].TypeName = names[list[i].Type]
+	}
 	return list, total, nil
 }
 
@@ -189,6 +202,11 @@ func (s *ClientService) GetProduct(ctx context.Context, id uint64) (*ClientProdu
 	if v.ID == 0 {
 		return nil, ErrProductNotFound
 	}
+	names, err := categoryNames(ctx, s.db, []string{v.Type})
+	if err != nil {
+		return nil, err
+	}
+	v.TypeName = names[v.Type]
 
 	denoms, err := s.denominationViews(ctx, id, v.Discount)
 	if err != nil {

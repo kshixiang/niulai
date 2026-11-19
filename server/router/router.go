@@ -78,6 +78,13 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	codes.GET("", codeCtl.List)
 	codes.PUT("/:id/status", codeCtl.UpdateStatus)
 
+	// 商品分类：商品与渠道共用，名称可编辑，关联标识固定。
+	categoryCtl := controller.NewCategoryController(service.NewCategoryService(db))
+	categories := admin.Group("/categories")
+	categories.GET("", categoryCtl.List)
+	categories.POST("", categoryCtl.Create)
+	categories.PUT("/:id", categoryCtl.Update)
+
 	// 渠道管理
 	channelSvc := service.NewChannelService(db)
 	channelCtl := controller.NewChannelController(channelSvc)

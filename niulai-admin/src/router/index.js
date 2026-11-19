@@ -33,6 +33,12 @@ const routes = [
         meta: { title: '渠道管理' },
       },
       {
+        path: 'categories',
+        name: 'Categories',
+        component: () => import('@/views/CategoryManage.vue'),
+        meta: { title: '分类管理' },
+      },
+      {
         path: 'users',
         name: 'Users',
         component: () => import('@/views/UserManage.vue'),

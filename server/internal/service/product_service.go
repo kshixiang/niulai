@@ -95,7 +95,7 @@ type ProductFieldInput struct {
 // CreateProductRequest 新增商品请求
 type CreateProductRequest struct {
 	Name            string              `json:"name" binding:"required,max=128"`
-	Type            string              `json:"type" binding:"required,oneof=话费 卡券"`
+	Type            string              `json:"type" binding:"required,max=32"`
 	CoverImage      string              `json:"cover_image" binding:"required,max=512"`
 	ChannelDiscount string              `json:"channel_discount" binding:"required"`
 	Discount        string              `json:"discount" binding:"required"`
@@ -110,7 +110,7 @@ type CreateProductRequest struct {
 // Denominations / Fields 用指针区分「未传=不改」与「传空=清空」。
 type UpdateProductRequest struct {
 	Name            *string              `json:"name" binding:"omitempty,max=128"`
-	Type            *string              `json:"type" binding:"omitempty,oneof=话费 卡券"`
+	Type            *string              `json:"type" binding:"omitempty,max=32"`
 	CoverImage      *string              `json:"cover_image" binding:"omitempty,max=512"`
 	ChannelDiscount *string              `json:"channel_discount"`
 	Discount        *string              `json:"discount"`
@@ -164,6 +164,7 @@ type AdminProductView struct {
 	ID              uint64                  `json:"id"`
 	Name            string                  `json:"name"`
 	Type            string                  `json:"type"`
+	TypeName        string                  `json:"type_name"`
 	CoverImage      string                  `json:"cover_image"`
 	ChannelDiscount model.Money             `json:"channel_discount"`
 	Discount        model.Money             `json:"discount"`
@@ -381,6 +382,9 @@ func (s *ProductService) ensureChannelUsable(ctx context.Context, channelID uint
 
 // Create 新增商品。上架（status=1）前校验绑定渠道有效性；价格类别与填写项在事务内一并写入。
 func (s *ProductService) Create(ctx context.Context, req *CreateProductRequest) (*model.Product, error) {
+	if err := ensureCategoryExists(ctx, s.db, req.Type); err != nil {
+		return nil, err
+	}
 	channelDiscount, err := parseDiscountField(req.ChannelDiscount)
 	if err != nil {
 		return nil, err
@@ -462,8 +466,18 @@ func (s *ProductService) List(ctx context.Context, req *ListProductRequest) ([]A
 		return nil, 0, fmt.Errorf("查询商品列表失败: %w", err)
 	}
 	views := make([]AdminProductView, 0, len(list))
+	codes := make([]string, 0, len(list))
 	for _, p := range list {
-		views = append(views, toAdminView(p))
+		codes = append(codes, p.Type)
+	}
+	names, err := categoryNames(ctx, s.db, codes)
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, p := range list {
+		v := toAdminView(p)
+		v.TypeName = names[p.Type]
+		views = append(views, v)
 	}
 	return views, total, nil
 }
@@ -484,6 +498,9 @@ func (s *ProductService) Update(ctx context.Context, id uint64, req *UpdateProdu
 		updates["name"] = *req.Name
 	}
 	if req.Type != nil {
+		if err := ensureCategoryExists(ctx, s.db, *req.Type); err != nil {
+			return nil, err
+		}
 		updates["type"] = *req.Type
 	}
 	if req.CoverImage != nil {

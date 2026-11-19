@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { createProduct, updateProduct } from '@/api/product'
 import { uploadCover } from '@/api/upload'
+import CategorySelect from './CategorySelect.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -18,9 +19,6 @@ const visible = computed({
 })
 const isEdit = computed(() => !!props.product?.id)
 const title = computed(() => (isEdit.value ? '编辑商品' : '新增商品'))
-
-// 与后端 CreateProductRequest 的 binding:"oneof=话费 卡券" 保持一致
-const TYPE_OPTIONS = ['话费', '卡券']
 
 // 话费商品必须填写的项：field_key 与服务端 defaultPhoneFields 一致，后台可自行调整其它内容
 const PHONE_DEFAULT_FIELDS = [
@@ -330,10 +328,8 @@ async function submit() {
         <el-input v-model="form.name" placeholder="请输入商品名称" maxlength="128" show-word-limit clearable />
       </el-form-item>
 
-      <el-form-item label="商品类型" prop="type">
-        <el-select v-model="form.type" placeholder="请选择商品类型" style="width: 100%">
-          <el-option v-for="t in TYPE_OPTIONS" :key="t" :label="t" :value="t" />
-        </el-select>
+      <el-form-item label="商品分类" prop="type">
+        <CategorySelect v-model="form.type" :active="visible" />
       </el-form-item>
 
       <el-form-item label="封面图片" prop="cover_image">

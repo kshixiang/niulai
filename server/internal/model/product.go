@@ -6,7 +6,7 @@ const (
 	ProductStatusOnline  int8 = 1
 )
 
-// 商品类型白名单
+// 内置分类的固定标识。显示名可编辑，业务判断仍使用固定标识。
 const (
 	ProductTypePhone = "话费"
 	ProductTypeCard  = "卡券"

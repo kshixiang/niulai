@@ -153,3 +153,19 @@ func TestRechargeRoutesProtected(t *testing.T) {
 		}
 	}
 }
+
+func TestCategoryRoutesRequireAdmin(t *testing.T) {
+	r := newTestRouter(t)
+	userToken, _ := jwt.SignUser(42, routerTestSecret, 24)
+	for _, route := range []struct{ method, path string }{
+		{"GET", "/api/v1/admin/categories"},
+		{"POST", "/api/v1/admin/categories"},
+		{"PUT", "/api/v1/admin/categories/1"},
+	} {
+		for _, token := range []string{"", userToken} {
+			if code := call(t, r, route.method, route.path, token); code != 401 {
+				t.Errorf("%s %s 应只允许管理员访问，code=%d", route.method, route.path, code)
+			}
+		}
+	}
+}

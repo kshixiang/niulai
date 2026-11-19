@@ -81,7 +81,7 @@ onMounted(loadData)
       <el-table-column prop="name" label="渠道名称" min-width="140" show-overflow-tooltip />
       <el-table-column label="商品分类" width="110" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.category" type="info" effect="plain" size="small">{{ row.category }}</el-tag>
+          <el-tag v-if="row.category" type="info" effect="plain" size="small">{{ row.category_name || row.category }}</el-tag>
           <span v-else>—</span>
         </template>
       </el-table-column>
