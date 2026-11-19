@@ -183,7 +183,7 @@ const otherMenus = [
       <div class="wallet__watermark" aria-hidden="true"><van-icon name="gold-coin-o" size="86" /></div>
 
       <div class="wallet__btns">
-        <button type="button" class="wallet__btn wallet__btn--blue" @click="comingSoon('充值')">
+        <button type="button" class="wallet__btn wallet__btn--blue" @click="router.push('/recharge')">
           <van-icon name="arrow-down" /> 充值
         </button>
         <button type="button" class="wallet__btn wallet__btn--blue" @click="comingSoon('提现')">

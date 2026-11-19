@@ -86,10 +86,10 @@ function goBack() {
   if (window.history.state?.back) router.back()
   else router.replace('/home')
 }
-// 立即充值：跳到「我的」，顶部余额卡片即充值入口
+// 立即充值：直接进入充值通道，返回时仍保留下单页面。
 function goRecharge() {
   showInsufficient.value = false
-  router.push('/mine')
+  router.push('/recharge')
 }
 
 onMounted(async () => {

@@ -45,3 +45,8 @@ export const updateProfile = (data) => request.put(`${CLIENT}/auth/profile`, dat
 
 // 当前用户资金账户 GET /api/v1/wallet（需 Bearer token）→ { balance, frozen_balance }
 export const getWallet = () => request.get(`${CLIENT}/wallet`)
+
+// USDT/TRC-20 充值：配置、本人申报、本人分页记录均需要用户令牌。
+export const getRechargeConfig = () => request.get(`${CLIENT}/recharge-config`)
+export const createRecharge = (data) => request.post(`${CLIENT}/recharges`, data)
+export const getRecharges = (params) => request.get(`${CLIENT}/recharges`, { params })

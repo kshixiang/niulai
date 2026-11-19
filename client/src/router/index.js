@@ -15,6 +15,8 @@ const routes = [
     ],
   },
   { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { title: '登录' } },
+  { path: '/recharge', name: 'recharge', component: () => import('@/views/Recharge.vue'), meta: { title: '极速通道', requiresAuth: true } },
+  { path: '/recharge-records', name: 'recharge-records', component: () => import('@/views/RechargeRecords.vue'), meta: { title: '充值记录', requiresAuth: true } },
   // 下单页为独立全屏页（无 tabbar），与 /login 并列
   { path: '/order/:id', name: 'order', component: () => import('@/views/Order.vue'), meta: { title: '下单', requiresAuth: true } },
   // 订单详情页（独立全屏，无 tabbar）
