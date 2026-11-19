@@ -9,6 +9,12 @@ const routes = [
     redirect: '/products',
     children: [
       {
+        path: 'recharges',
+        name: 'Recharges',
+        component: () => import('@/views/RechargeManage.vue'),
+        meta: { title: '充值管理' },
+      },
+      {
         path: 'products',
         name: 'Products',
         component: () => import('@/views/ProductManage.vue'),
