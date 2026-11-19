@@ -62,5 +62,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Order{},
 		&model.CommissionRecord{},
 		&model.WalletTransaction{},
+		&model.Setting{},
+		&model.Recharge{},
 	)
 }

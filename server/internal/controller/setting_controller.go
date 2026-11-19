@@ -41,7 +41,7 @@ func (ctl *SettingController) ExchangeRate(c *gin.Context) {
 	response.Success(c, gin.H{"usdt_cny_rate": rate.StringFixed(2)})
 }
 
-// respondSettings 后台设置全量视图：注册开关 + 汇率。
+// respondSettings 后台设置全量视图：注册开关、汇率与充值地址。
 func (ctl *SettingController) respondSettings(c *gin.Context) {
 	ctx := c.Request.Context()
 	required, err := ctl.svc.IsRegisterCodeRequired(ctx)
@@ -54,17 +54,24 @@ func (ctl *SettingController) respondSettings(c *gin.Context) {
 		handleServiceError(c, err)
 		return
 	}
+	address, err := ctl.svc.GetRechargeAddress(ctx)
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
 	response.Success(c, gin.H{
 		"register_code_required": required,
 		"usdt_cny_rate":          rate.StringFixed(2),
+		"recharge_trc20_address": address,
 	})
 }
 
-// UpdateSettingRequest 后台更新设置请求。两个字段均可选，至少提供一项；
+// UpdateSettingRequest 后台更新设置请求。各字段均可选，至少提供一项；
 // 未提供的字段保持不变，兼容旧版只更新注册开关的调用。
 type UpdateSettingRequest struct {
 	RegisterCodeRequired *bool   `json:"register_code_required"`
 	USDTCNYRate          *string `json:"usdt_cny_rate"`
+	RechargeAddress      *string `json:"recharge_trc20_address"`
 }
 
 // Update 后台更新设置 PUT /api/v1/admin/settings
@@ -73,11 +80,17 @@ func (ctl *SettingController) Update(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if req.RegisterCodeRequired == nil && req.USDTCNYRate == nil {
+	if req.RegisterCodeRequired == nil && req.USDTCNYRate == nil && req.RechargeAddress == nil {
 		response.Fail(c, response.CodeInvalidParam, "未提供要更新的设置项")
 		return
 	}
 	ctx := c.Request.Context()
+	if req.RechargeAddress != nil {
+		if err := ctl.svc.SetRechargeAddress(ctx, *req.RechargeAddress); err != nil {
+			handleServiceError(c, err)
+			return
+		}
+	}
 	if req.RegisterCodeRequired != nil {
 		if err := ctl.svc.SetRegisterCodeRequired(ctx, *req.RegisterCodeRequired); err != nil {
 			handleServiceError(c, err)

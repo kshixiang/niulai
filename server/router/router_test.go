@@ -126,3 +126,30 @@ func TestCreateOrderRouteProtected(t *testing.T) {
 		t.Fatalf("下单接口未正确响应参数校验, code=%d", code)
 	}
 }
+
+func TestRechargeRoutesProtected(t *testing.T) {
+	r := newTestRouter(t)
+	userToken, _ := jwt.SignUser(42, routerTestSecret, 24)
+	adminToken, _ := jwt.Sign("admin", routerTestSecret, 24)
+	for _, route := range []struct{ method, path string }{
+		{"GET", "/api/v1/recharge-config"},
+		{"GET", "/api/v1/recharges"},
+		{"POST", "/api/v1/recharges"},
+	} {
+		for _, token := range []string{"", adminToken} {
+			if code := call(t, r, route.method, route.path, token); code != 401 {
+				t.Errorf("%s %s 应拒绝非用户身份，code=%d", route.method, route.path, code)
+			}
+		}
+	}
+	for _, route := range []struct{ method, path string }{
+		{"GET", "/api/v1/admin/recharges"},
+		{"PUT", "/api/v1/admin/recharges/1/review"},
+	} {
+		for _, token := range []string{"", userToken} {
+			if code := call(t, r, route.method, route.path, token); code != 401 {
+				t.Errorf("%s %s 应拒绝非管理员身份，code=%d", route.method, route.path, code)
+			}
+		}
+	}
+}

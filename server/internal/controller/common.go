@@ -79,6 +79,11 @@ func handleServiceError(c *gin.Context, err error) {
 		errors.Is(err, gorm.ErrRecordNotFound):
 		response.Fail(c, response.CodeNotFound, err.Error())
 	case errors.Is(err, service.ErrChannelUnusable),
+		errors.Is(err, service.ErrInvalidRecharge),
+		errors.Is(err, service.ErrRechargeUnavailable),
+		errors.Is(err, service.ErrRechargeAddressChanged),
+		errors.Is(err, service.ErrRechargeDuplicate),
+		errors.Is(err, service.ErrRechargeReviewed),
 		errors.Is(err, service.ErrInvalidPrice),
 		errors.Is(err, service.ErrInvalidProductField),
 		errors.Is(err, service.ErrProductOffline),

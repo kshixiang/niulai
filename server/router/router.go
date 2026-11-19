@@ -54,6 +54,10 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	walletSvc := service.NewWalletService(db)
 	walletCtl := controller.NewWalletController(walletSvc)
 	v1.GET("/wallet", middleware.UserRequired(), walletCtl.Get)
+	rechargeCtl := controller.NewRechargeController(service.NewRechargeService(db, settingSvc))
+	v1.GET("/recharge-config", middleware.UserRequired(), rechargeCtl.Config)
+	v1.GET("/recharges", middleware.UserRequired(), rechargeCtl.List)
+	v1.POST("/recharges", middleware.UserRequired(), rechargeCtl.Create)
 
 	// 登录接口独立成免鉴权组，必须在 AdminRequired 之前注册
 	public := v1.Group("/admin")
@@ -65,6 +69,8 @@ func Register(r *gin.Engine, db *gorm.DB) {
 	admin.POST("/upload/cover", uploadCtl.UploadCover)
 	admin.GET("/settings", settingCtl.Get)
 	admin.PUT("/settings", settingCtl.Update)
+	admin.GET("/recharges", rechargeCtl.AdminList)
+	admin.PUT("/recharges/:id/review", rechargeCtl.Review)
 
 	// 注册码管理（后台生成、启用/禁用）
 	codes := admin.Group("/register-codes")
